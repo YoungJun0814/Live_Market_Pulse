@@ -1,0 +1,33 @@
+# ── Core Framework ────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# ── Market Data (Andy: market_sentiment_engine.py) ────────────────────────────
+yfinance>=0.2.36
+pandas>=2.0.0
+fredapi>=0.5.1          # FRED macro data (CPI, unemployment, Fed rate, GDP)
+pytrends>=4.9.2         # Google Trends sentiment survey
+openpyxl>=3.1.2         # pandas Excel support (yfinance dependency)
+requests>=2.31.0        # HTTP sessions (CNN Fear & Greed scraper)
+
+# ── Bloomberg Pipeline (Tamas) ─────────────────────────────────────────────────
+yt-dlp>=2024.1.0        # YouTube audio extraction
+ffmpeg-python>=0.2.0    # Audio chunking (30s segments)
+
+# ── Politician Pipeline (Tim) ──────────────────────────────────────────────────
+telethon>=1.34.0        # Telegram public channel monitoring (userbot)
+gdeltdoc>=1.0.0         # GDELT global news/political events
+
+# ── Gemini AI ─────────────────────────────────────────────────────────────────
+google-generativeai>=0.7.0   # Pre-MVP: standard Gemini API
+# google-genai>=1.0.0        # Hackathon day: Gemini Live API (uncomment when needed)
+
+# ── WebSocket / Scheduling ────────────────────────────────────────────────────
+python-socketio>=5.11.0      # WebSocket server (frontend push)
+python-engineio>=4.9.0       # socket.io engine
+apscheduler>=3.10.0          # 30-second batch scheduler
+aiohttp>=3.9.0               # Async HTTP client
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0         # .env file loader
+pydantic>=2.0.0              # Data validation (FastAPI models)

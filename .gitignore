@@ -1,0 +1,44 @@
+# ── Secrets — NEVER commit these ─────────────────────────────────────────────
+.env
+*.env
+backend/.env
+!backend/.env.example
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.eggs/
+
+# ── Telethon session files (contain auth tokens) ──────────────────────────────
+*.session
+*.session-journal
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/build/
+.next/
+.nuxt/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs & Cache ──────────────────────────────────────────────────────────────
+*.log
+.cache/
+*.tmp
