@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBAL EVENT INTELLIGENCE</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #05080d;
+  --bg2:     #090d15;
+  --bg3:     #0d1220;
+  --border:  #17222f;
+  --border2: #1e2e40;
+  --red:     #ff1a1a;
+  --amber:   #c08000;
+  --cyan:    #00ccee;
+  --text:    #aabfcc;
+  --dim:     #3d5060;
+  --hi:      #ddeeff;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'IBM Plex Mono',monospace; }
+
+/* scanline */
+body::after {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);
+}
+
+/* ── LAYOUT ── */
+#layout { display:grid; grid-template-rows:48px 1fr; grid-template-columns:1fr 340px; width:100vw; height:100vh; }
+
+/* ── TOPBAR ── */
+#topbar {
+  grid-column:1/-1;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 22px;
+  background:var(--bg2); border-bottom:1px solid var(--border);
+  position:relative; z-index:500;
+}
+#topbar::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--red) 30%,var(--cyan) 70%,transparent);
+  opacity:.4;
+}
+.brand { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:6px; color:var(--hi); }
+.brand-sub { font-size:8px; letter-spacing:3px; color:var(--dim); margin-top:1px; }
+
+.top-stats { display:flex; gap:28px; }
+.stat { text-align:center; }
+.stat-n { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:var(--red); line-height:1; }
+.stat-l { font-size:8px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; }
+
+.top-right { display:flex; align-items:center; gap:14px; }
+.live { display:flex; align-items:center; gap:6px; font-size:10px; letter-spacing:2px; color:#00ff88; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:#00ff88; box-shadow:0 0 8px #00ff88; animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+#ts { font-size:9px; color:var(--dim); letter-spacing:1px; }
+#mock-flag { font-size:9px; color:var(--amber); letter-spacing:1px; display:none; }
+
+/* ── MAP ── */
+#map-wrap { position:relative; overflow:hidden; }
+#map { width:100%; height:100%; background:#03060a; }
+
+/* Leaflet dark */
+.leaflet-container { background:#03060a !important; }
+.leaflet-control-zoom { border:1px solid var(--border2)!important; border-radius:2px!important; }
+.leaflet-control-zoom a {
+  background:var(--bg2)!important; color:var(--text)!important;
+  border-bottom:1px solid var(--border)!important;
+  font-family:'IBM Plex Mono',monospace!important;
+  width:26px!important; height:26px!important; line-height:26px!important; font-size:16px!important;
+}
+.leaflet-control-zoom a:hover { background:var(--bg3)!important; color:var(--hi)!important; }
+.leaflet-control-attribution { background:rgba(5,8,13,.8)!important; color:#1e2e40!important; font-size:8px!important; }
+.leaflet-control-attribution a { color:#1e2e40!important; }
+
+/* ── CUSTOM HOVER POPUP ── */
+#hover-popup {
+  position:fixed; z-index:2000; pointer-events:none;
+  background:rgba(9,13,21,.97); border:1px solid var(--border2);
+  min-width:260px; max-width:320px;
+  padding:12px 14px;
+  display:none;
+  backdrop-filter:blur(12px);
+  box-shadow:0 8px 32px rgba(0,0,0,.9), 0 0 0 1px rgba(255,26,26,.15);
+}
+.hp-country {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:17px; letter-spacing:3px; color:var(--hi);
+  margin-bottom:4px;
+}
+.hp-count {
+  font-size:11px; color:var(--red);
+  font-family:'Bebas Neue',sans-serif; letter-spacing:2px;
+  margin-bottom:8px; padding-bottom:8px;
+  border-bottom:1px solid var(--border2);
+}
+.hp-events { display:flex; flex-direction:column; gap:6px; }
+.hp-event { font-size:9px; line-height:1.5; color:var(--text); }
+.hp-event-label { color:var(--hi); }
+.hp-event-time { color:var(--dim); font-size:8px; }
+.hp-no-events { font-size:9px; color:var(--dim); letter-spacing:1px; }
+.hp-tag {
+  display:inline-block; font-size:7px; letter-spacing:1px; padding:1px 4px;
+  border-radius:1px; text-transform:uppercase; margin-right:4px;
+}
+.tag-r19,.tag-r18,.tag-r20 { background:rgba(255,26,26,.15); color:#ff7777; border:1px solid rgba(255,26,26,.3); }
+.tag-r17,.tag-r16 { background:rgba(208,90,0,.15); color:#ffaa66; border:1px solid rgba(208,90,0,.3); }
+.tag-r15 { background:rgba(127,255,0,.1); color:#aaffaa; border:1px solid rgba(127,255,0,.25); }
+.tag-r14 { background:rgba(0,200,238,.08); color:#88ddff; border:1px solid rgba(0,200,238,.2); }
+.tag-r13 { background:rgba(192,128,0,.12); color:#ffcc66; border:1px solid rgba(192,128,0,.3); }
+.tag-other { background:rgba(60,80,96,.2); color:#6a8899; border:1px solid rgba(60,80,96,.3); }
+
+/* ── LEGEND ── */
+#legend {
+  position:absolute; bottom:20px; left:18px; z-index:400;
+  background:rgba(9,13,21,.92); border:1px solid var(--border2);
+  padding:10px 13px; backdrop-filter:blur(8px);
+}
+.legend-title { font-size:8px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; margin-bottom:7px; }
+.legend-bar {
+  display:flex; height:9px; width:200px; border-radius:1px; overflow:hidden; margin-bottom:4px;
+}
+.lb { flex:1; }
+.legend-labs { display:flex; justify-content:space-between; font-size:8px; color:var(--dim); letter-spacing:.5px; }
+.legend-labs span:last-child { color:var(--red); }
+
+/* ── PANEL ── */
+#panel {
+  display:flex; flex-direction:column;
+  background:var(--bg2); border-left:1px solid var(--border); overflow:hidden;
+}
+
+/* panel top */
+#panel-top { padding:13px 15px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.panel-title { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:5px; color:var(--hi); margin-bottom:9px; }
+
+/* filter chips */
+.chips { display:flex; flex-wrap:wrap; gap:4px; }
+.chip {
+  padding:3px 8px; font-size:8px; letter-spacing:1.5px; text-transform:uppercase;
+  border:1px solid var(--border2); background:var(--bg3); color:var(--dim);
+  cursor:pointer; border-radius:1px; transition:all .12s; user-select:none;
+}
+.chip:hover { border-color:var(--text); color:var(--text); }
+.chip.on { color:var(--red); border-color:var(--red); background:rgba(255,26,26,.07); }
+.chip[data-f="military"].on { color:#7fff00; border-color:#7fff00; background:rgba(127,255,0,.06); }
+.chip[data-f="economic"].on { color:#ffcc44; border-color:#c08000; background:rgba(192,128,0,.07); }
+.chip[data-f="protest"].on  { color:#88ddff; border-color:var(--cyan); background:rgba(0,204,238,.05); }
+
+/* country filter banner */
+#ctry-banner {
+  display:none; align-items:center; justify-content:space-between;
+  padding:7px 14px; border-bottom:1px solid var(--border);
+  background:rgba(255,26,26,.05); flex-shrink:0;
+}
+#ctry-banner.show { display:flex; }
+#ctry-name { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:3px; color:var(--hi); }
+#ctry-clear { font-size:8px; color:var(--dim); cursor:pointer; letter-spacing:1px; text-transform:uppercase; transition:color .1s; }
+#ctry-clear:hover { color:var(--text); }
+
+/* feed header */
+#feed-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:5px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.fh-label { font-size:8px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; }
+#feed-count { font-size:8px; color:var(--red); letter-spacing:1px; }
+
+/* feed list */
+#feed { flex:1; overflow-y:auto; }
+#feed::-webkit-scrollbar { width:2px; }
+#feed::-webkit-scrollbar-thumb { background:var(--border2); }
+
+.ev {
+  padding:9px 14px 8px; border-bottom:1px solid var(--border);
+  cursor:pointer; transition:background .1s; position:relative;
+}
+.ev:hover { background:var(--bg3); }
+.ev.hi { background:rgba(255,26,26,.05); }
+.ev.hi::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--red); }
+
+.ev-ts { font-size:8px; color:var(--dim); letter-spacing:.5px; margin-bottom:3px; display:flex; justify-content:space-between; }
+.ev-sev { display:flex; gap:2px; }
+.sev-pip { width:5px; height:5px; border-radius:50%; display:inline-block; }
+.ev-label { font-size:9px; line-height:1.45; color:var(--text); margin-bottom:4px; }
+.ev-foot { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+.ev-tone { font-size:8px; color:var(--dim); }
+.ev-src { font-size:7px; color:var(--dim); text-decoration:none; letter-spacing:.5px; }
+.ev-src:hover { color:var(--text); }
+
+/* loading */
+#loading {
+  position:fixed; inset:0; background:var(--bg); z-index:9998;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+.ld-title { font-family:'Bebas Neue',sans-serif; font-size:42px; letter-spacing:10px; color:var(--hi); }
+.ld-sub { font-size:9px; letter-spacing:4px; color:var(--dim); animation:blink 1.5s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="ld-title">INTEL</div>
+  <div class="ld-sub">Loading global event intelligence …</div>
+</div>
+
+<div id="hover-popup">
+  <div class="hp-country" id="hp-country"></div>
+  <div class="hp-count"   id="hp-count"></div>
+  <div class="hp-events"  id="hp-events"></div>
+</div>
+
+<div id="layout">
+  <div id="topbar">
+    <div>
+      <div class="brand">GLOBAL EVENT INTELLIGENCE</div>
+      <div class="brand-sub">GDELT 2.0 · 15-min refresh · war &amp; economic signals</div>
+    </div>
+    <div class="top-stats">
+      <div class="stat"><div class="stat-n" id="sn-events">—</div><div class="stat-l">Events</div></div>
+      <div class="stat"><div class="stat-n" id="sn-ctries">—</div><div class="stat-l">Countries</div></div>
+      <div class="stat"><div class="stat-n" id="sn-crit">—</div>  <div class="stat-l">Critical</div></div>
+    </div>
+    <div class="top-right">
+      <div id="mock-flag">⚠ DEMO DATA</div>
+      <div class="live"><div class="live-dot"></div>LIVE</div>
+      <div id="ts">—</div>
+    </div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="legend">
+      <div class="legend-title">Event Severity Weight</div>
+      <div class="legend-bar">
+        <div class="lb" style="background:#05111e"></div>
+        <div class="lb" style="background:#082040"></div>
+        <div class="lb" style="background:#0a3870"></div>
+        <div class="lb" style="background:#085878"></div>
+        <div class="lb" style="background:#0a6850"></div>
+        <div class="lb" style="background:#3a7015"></div>
+        <div class="lb" style="background:#808010"></div>
+        <div class="lb" style="background:#b07000"></div>
+        <div class="lb" style="background:#d05000"></div>
+        <div class="lb" style="background:#e02800"></div>
+        <div class="lb" style="background:#ff1a1a"></div>
+      </div>
+      <div class="legend-labs"><span>None</span><span>Low</span><span>Medium</span><span>High</span><span>Critical</span></div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div id="panel-top">
+      <div class="panel-title">Live Event Feed</div>
+      <div class="chips">
+        <div class="chip on" data-f="all">All</div>
+        <div class="chip"    data-f="conflict">War / Conflict</div>
+        <div class="chip"    data-f="economic">Economic</div>
+        <div class="chip"    data-f="military">Military</div>
+        <div class="chip"    data-f="protest">Protest</div>
+      </div>
+    </div>
+    <div id="ctry-banner">
+      <span id="ctry-name">—</span>
+      <span id="ctry-clear">✕ Clear</span>
+    </div>
+    <div id="feed-header">
+      <span class="fh-label">Showing</span>
+      <span id="feed-count">—</span>
+    </div>
+    <div id="feed"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════
+const API_BASE  = "http://localhost:5001";
+const GEOJSON = "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json";
+const REFRESH   = 60_000;
+
+// ═══════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ═══════════════════════════════════════════════════════════
+let countryData  = {};   // ISO2 → { count, weight, events:[] }
+let allEvents    = [];   // full flat event list, newest-first
+let geoReady     = false;
+let dataReady    = false;
+let selCountry   = null; // ISO2 of clicked country
+let topicFilter  = "all";
+const layerByIso = {};   // ISO2 → Leaflet layer
+const nameByIso  = {};   // ISO2 → human name
+
+// ═══════════════════════════════════════════════════════════
+//  COLOUR SCALE  (weight → fill)
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+//  COLOUR SCALE  (對真實 15 分鐘短資料更敏感的級距)
+// ═══════════════════════════════════════════════════════════
+function weightToFill(w) {
+  // 沒有事件時，保持原本的極暗深藍色
+  if (!w || w === 0) return { color:"#05111e", opacity:0.4  };
+
+  // 只要有事件 (w>0)，就立刻跳到高對比度的顏色，確保肉眼清晰可見！
+  if (w <   5) return { color:"#808010", opacity:0.75 }; // 黃綠色 (低強度)
+  if (w <  15) return { color:"#b07000", opacity:0.80 }; // 橘色 (中強度)
+  if (w <  30) return { color:"#d05000", opacity:0.85 }; // 深橘色 (高強度)
+  if (w <  50) return { color:"#e02800", opacity:0.90 }; // 亮紅色 (危險)
+  return               { color:"#ff1a1a", opacity:0.96 }; // 血紅色 (極端嚴重)
+}
+
+function layerStyle(iso2, selected) {
+  const w   = countryData[iso2]?.weight || 0;
+  const f   = weightToFill(w);
+  return {
+    fillColor:   f.color,
+    fillOpacity: f.opacity,
+    weight:      selected ? 2   : 0.5,
+    color:       selected ? "#ff4444" : "#1a2838",
+    opacity:     1,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CAMEO ROOT → label / tag class
+// ═══════════════════════════════════════════════════════════
+const ROOT_LABEL = {
+  "13":"Threat","14":"Protest","15":"Force Posture",
+  "16":"Sanctions","17":"Coercion","18":"Assault",
+  "19":"Armed Conflict","20":"Mass Violence",
+  "03":"Econ Coop","06":"Aid","07":"Aid Provided",
+};
+function rootTag(root) {
+  const label = ROOT_LABEL[root] || "Event";
+  const cls   = ["18","19","20"].includes(root) ? "tag-r"+root
+              : ["17","16"].includes(root)       ? "tag-r17"
+              : root === "15"                    ? "tag-r15"
+              : root === "14"                    ? "tag-r14"
+              : root === "13"                    ? "tag-r13"
+              : "tag-other";
+  return `<span class="hp-tag ${cls}">${label}</span>`;
+}
+function feedTag(root) {
+  const label = ROOT_LABEL[root] || "Event";
+  const cls   = ["18","19","20"].includes(root) ? "tag-r19"
+              : ["17","16"].includes(root)       ? "tag-r17"
+              : root === "15"                    ? "tag-r15"
+              : root === "14"                    ? "tag-r14"
+              : root === "13"                    ? "tag-r13"
+              : "tag-other";
+  return `<span class="hp-tag ${cls}">${label}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SEVERITY PIPS
+// ═══════════════════════════════════════════════════════════
+function sevPips(sev) {
+  const n   = Math.max(1, Math.ceil(sev / 2));
+  const col = sev >= 9 ? "#ff1a1a"
+            : sev >= 7 ? "#e03000"
+            : sev >= 5 ? "#c07800"
+            : sev >= 3 ? "#4a7a20"
+            : "#2a4a5a";
+  return Array.from({length: Math.min(5,n)},
+    ()=>`<span class="sev-pip" style="background:${col}"></span>`).join("");
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FORMAT TIMESTAMP
+// ═══════════════════════════════════════════════════════════
+function fmtTs(ts) {
+  if (!ts || ts.length < 8) return "—";
+  const y=ts.slice(0,4), m=ts.slice(4,6), d=ts.slice(6,8);
+  const h=ts.slice(8,10)||"", mi=ts.slice(10,12)||"";
+  return h ? `${y}-${m}-${d} ${h}:${mi}Z` : `${y}-${m}-${d}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HOVER POPUP
+// ═══════════════════════════════════════════════════════════
+const popup = document.getElementById("hover-popup");
+
+document.addEventListener("mousemove", e => {
+  if (popup.style.display === "block") {
+    const W = window.innerWidth, H = window.innerHeight;
+    let x = e.clientX + 18, y = e.clientY + 18;
+    if (x + 340 > W) x = e.clientX - 340 - 10;
+    if (y + 220 > H) y = e.clientY - 220 - 10;
+    popup.style.left = x + "px";
+    popup.style.top  = y + "px";
+  }
+});
+
+function showPopup(iso2, name) {
+  const cdata  = countryData[iso2];
+  const count  = cdata?.count  || 0;
+  const weight = cdata?.weight || 0;
+  if (!count) return;
+
+  document.getElementById("hp-country").textContent = name.toUpperCase();
+  document.getElementById("hp-count").textContent   =
+    `${count} events · severity weight ${weight}`;
+
+  // Pull top 3 events for this country from the flat list
+  const evs = allEvents.filter(e => e.country === iso2).slice(0, 3);
+  const evHTML = evs.length
+    ? evs.map(ev => `
+        <div class="hp-event">
+          <div class="hp-event-label">${rootTag(ev.root)}${ev.label.slice(0, 90)}${ev.label.length > 90 ? "…" : ""}</div>
+          <div class="hp-event-time">${fmtTs(ev.ts)} · ${ev.mentions || 1} mentions</div>
+        </div>`).join("")
+    : `<div class="hp-no-events">No detailed events cached</div>`;
+
+  document.getElementById("hp-events").innerHTML = evHTML;
+  popup.style.display = "block";
+}
+
+function hidePopup() { popup.style.display = "none"; }
+
+// ═══════════════════════════════════════════════════════════
+//  CHOROPLETH: repaint all layers
+// ═══════════════════════════════════════════════════════════
+function repaintMap() {
+  if (!geoReady) return;
+  
+  let coloredCount = 0;
+  let backendKeys = Object.keys(countryData);
+  let mapKeys = Object.keys(layerByIso);
+  
+  Object.entries(layerByIso).forEach(([iso2, layer]) => {
+    layer.setStyle(layerStyle(iso2, iso2 === selCountry));
+    // 只要有事件權重，就計數
+    if (countryData[iso2] && countryData[iso2].weight > 0) {
+        coloredCount++;
+    }
+  });
+  
+  // 🚨 超強診斷輸出 🚨
+  console.log(`\n=== 🕵️ 戰情室連線診斷報告 ===`);
+  console.log(`📡 1. 後端傳來的有事國家 (Backend):`, backendKeys.length > 0 ? backendKeys.join(", ") : "無資料");
+  console.log(`🗺️ 2. 地圖成功綁定的國家 (Map): 共有 ${mapKeys.length} 個 (例: ${mapKeys.slice(0, 5).join(", ")})`);
+  
+  let overlap = backendKeys.filter(k => mapKeys.includes(k));
+  console.log(`🔗 3. 兩邊成功對接的國家 (Overlap):`, overlap.length > 0 ? overlap.join(", ") : "【嚴重警告】交集為 0，代碼不匹配！");
+  console.log(`🎨 [地圖更新] 偵測到 ${coloredCount} 個國家發生事件，已更新地圖顏色！\n`);
+}
+// ═══════════════════════════════════════════════════════════
+//  FEED RENDER
+// ═══════════════════════════════════════════════════════════
+function getVisibleEvents() {
+  return allEvents.filter(ev => {
+    if (selCountry && ev.country !== selCountry) return false;
+    if (topicFilter === "conflict") return ["18","19","20","17"].includes(ev.root);
+    if (topicFilter === "economic") return ["16","17","03","06"].includes(ev.root);
+    if (topicFilter === "military") return ["15","18","19","20"].includes(ev.root);
+    if (topicFilter === "protest")  return ev.root === "14";
+    return true;
+  });
+}
+
+function renderFeed() {
+  const evs = getVisibleEvents();
+  document.getElementById("feed-count").textContent = evs.length + " events";
+
+  if (!evs.length) {
+    document.getElementById("feed").innerHTML =
+      `<div style="padding:28px;text-align:center;font-size:9px;letter-spacing:2px;color:var(--dim);">NO EVENTS MATCH</div>`;
+    return;
+  }
+
+  document.getElementById("feed").innerHTML = evs.map(ev => `
+    <div class="ev${ev.country === selCountry ? " hi" : ""}"
+         onclick="clickFeedItem('${ev.country}','${(nameByIso[ev.country]||ev.country).replace(/'/g,"\\'")}')">
+      <div class="ev-ts">
+        <span>${fmtTs(ev.ts)}</span>
+        <span class="ev-sev">${sevPips(ev.severity||1)}</span>
+      </div>
+      <div class="ev-label">${ev.label}</div>
+      <div class="ev-foot">
+        ${feedTag(ev.root)}
+        ${ev.tone !== undefined ? `<span class="ev-tone">tone ${ev.tone > 0 ? "+" : ""}${ev.tone}</span>` : ""}
+        ${ev.mentions ? `<span class="ev-tone">${ev.mentions} mentions</span>` : ""}
+        ${ev.url ? `<a class="ev-src" href="${ev.url}" target="_blank" onclick="event.stopPropagation()">↗ source</a>` : ""}
+      </div>
+    </div>`).join("");
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COUNTRY SELECT / DESELECT
+// ═══════════════════════════════════════════════════════════
+function selectCountry(iso2, name) {
+  if (selCountry === iso2) {
+    clearCountry(); return;
+  }
+  selCountry = iso2;
+  document.getElementById("ctry-banner").classList.add("show");
+  document.getElementById("ctry-name").textContent = name.toUpperCase();
+  repaintMap();
+  renderFeed();
+  // scroll feed to top
+  document.getElementById("feed").scrollTop = 0;
+}
+
+function clearCountry() {
+  selCountry = null;
+  document.getElementById("ctry-banner").classList.remove("show");
+  repaintMap();
+  renderFeed();
+}
+
+function clickFeedItem(iso2, name) {
+  selectCountry(iso2, name);
+  // bring that country into view
+  const layer = layerByIso[iso2];
+  if (layer) {
+    try { map.fitBounds(layer.getBounds(), { maxZoom:5, animate:true }); } catch(e) {}
+  }
+}
+
+document.getElementById("ctry-clear").addEventListener("click", clearCountry);
+
+// ═══════════════════════════════════════════════════════════
+//  FILTER CHIPS
+// ═══════════════════════════════════════════════════════════
+document.querySelectorAll(".chip[data-f]").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip[data-f]").forEach(c => c.classList.remove("on"));
+    chip.classList.add("on");
+    topicFilter = chip.dataset.f;
+    renderFeed();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  STATS BAR
+// ═══════════════════════════════════════════════════════════
+function updateStats(isMock) {
+  const total  = Object.values(countryData).reduce((s,c) => s + c.count, 0);
+  const cnum   = Object.keys(countryData).length;
+  const crit   = Object.values(countryData).filter(c => c.weight >= 175).length;
+  document.getElementById("sn-events").textContent = total  || "—";
+  document.getElementById("sn-ctries").textContent = cnum   || "—";
+  document.getElementById("sn-crit").textContent   = crit   || "—";
+  document.getElementById("ts").textContent =
+    "UPDATED " + new Date().toISOString().slice(11,16) + "Z";
+  document.getElementById("mock-flag").style.display = isMock ? "block" : "none";
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT MAP  (Leaflet + GeoJSON choropleth)
+// ═══════════════════════════════════════════════════════════
+let map;
+function initMap() {
+  map = L.map("map", {
+    center:[20, 10], zoom:2, minZoom:1, maxZoom:8,
+    zoomControl:true, attributionControl:true, worldCopyJump:false,
+  });
+
+  L.tileLayer(
+    "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+    { attribution:"&copy; CARTO", subdomains:"abcd", maxZoom:19 }
+  ).addTo(map);
+
+  // ISO3 轉 ISO2 的翻譯字典
+  const ISO3_TO_ISO2 = {
+    "AFG":"AF","ALB":"AL","DZA":"DZ","ASM":"AS","AND":"AD","AGO":"AO","AIA":"AI","ATA":"AQ","ATG":"AG","ARG":"AR",
+    "ARM":"AM","ABW":"AW","AUS":"AU","AUT":"AT","AZE":"AZ","BHS":"BS","BHR":"BH","BGD":"BD","BRB":"BB","BLR":"BY",
+    "BEL":"BE","BLZ":"BZ","BEN":"BJ","BMU":"BM","BTN":"BT","BOL":"BO","BIH":"BA","BWA":"BW","BVT":"BV","BRA":"BR",
+    "IOT":"IO","BRN":"BN","BGR":"BG","BFA":"BF","BDI":"BI","CPV":"CV","KHM":"KH","CMR":"CM","CAN":"CA","CYM":"KY",
+    "CAF":"CF","TCD":"TD","CHL":"CL","CHN":"CN","CXR":"CX","CCK":"CC","COL":"CO","COM":"KM","COD":"CD","COG":"CG",
+    "COK":"CK","CRI":"CR","HRV":"HR","CUB":"CU","CYP":"CY","CZE":"CZ","DNK":"DK","DJI":"DJ","DMA":"DM","DOM":"DO",
+    "ECU":"EC","EGY":"EG","SLV":"SV","GNQ":"GQ","ERI":"ER","EST":"EE","ETH":"ET","FLK":"FK","FRO":"FO","FJI":"FJ",
+    "FIN":"FI","FRA":"FR","GUF":"GF","PYF":"PF","ATF":"TF","GAB":"GA","GMB":"GM","GEO":"GE","DEU":"DE","GHA":"GH",
+    "GIB":"GI","GRC":"GR","GRL":"GL","GRD":"GD","GLP":"GP","GUM":"GU","GTM":"GT","GGY":"GG","GIN":"GN","GNB":"GW",
+    "GUY":"GY","HTI":"HT","HMD":"HM","VAT":"VA","HND":"HN","HKG":"HK","HUN":"HU","ISL":"IS","IND":"IN","IDN":"ID",
+    "IRN":"IR","IRQ":"IQ","IRL":"IE","IMN":"IM","ISR":"IL","ITA":"IT","JAM":"JM","JPN":"JP","JEY":"JE","JOR":"JO",
+    "KAZ":"KZ","KEN":"KE","KIR":"KI","PRK":"KP","KOR":"KR","KWT":"KW","KGZ":"KG","LAO":"LA","LVA":"LV","LBN":"LB",
+    "LSO":"LS","LBR":"LR","LBY":"LY","LIE":"LI","LTU":"LT","LUX":"LU","MAC":"MO","MDG":"MG","MWI":"MW","MYS":"MY",
+    "MDV":"MV","MLI":"ML","MLT":"MT","MHL":"MH","MTQ":"MQ","MRT":"MR","MUS":"MU","MYT":"YT","MEX":"MX","FSM":"FM",
+    "MDA":"MD","MCO":"MC","MNG":"MN","MNE":"ME","MSR":"MS","MAR":"MA","MOZ":"MZ","MMR":"MM","NAM":"NA","NRU":"NR",
+    "NPL":"NP","NLD":"NL","NCL":"NC","NZL":"NZ","NIC":"NI","NER":"NE","NGA":"NG","NIU":"NU","NFK":"NF","MKD":"MK",
+    "MNP":"MP","NOR":"NO","OMN":"OM","PAK":"PK","PLW":"PW","PSE":"PS","PAN":"PA","PNG":"PG","PRY":"PY","PER":"PE",
+    "PHL":"PH","PCN":"PN","POL":"PL","PRT":"PT","PRI":"PR","QAT":"QA","REU":"RE","ROU":"RO","RUS":"RU","RWA":"RW",
+    "BLM":"BL","SHN":"SH","KNA":"KN","LCA":"LC","MAF":"MF","SPM":"PM","VCT":"VC","WSM":"WS","SMR":"SM","STP":"ST",
+    "SAU":"SA","SEN":"SN","SRB":"RS","SYC":"SC","SLE":"SL","SGP":"SG","SXM":"SX","SVK":"SK","SVN":"SI","SLB":"SB",
+    "SOM":"SO","ZAF":"ZA","SGS":"GS","SSD":"SS","ESP":"ES","LKA":"LK","SDN":"SD","SUR":"SR","SJM":"SJ","SWZ":"SZ",
+    "SWE":"SE","CHE":"CH","SYR":"SY","TWN":"TW","TJK":"TJ","TZA":"TZ","THA":"TH","TLS":"TL","TGO":"TG","TKL":"TK",
+    "TON":"TO","TTO":"TT","TUN":"TN","TUR":"TR","TKM":"TM","TCA":"TC","TUV":"TV","UGA":"UG","UKR":"UA","ARE":"AE",
+    "GBR":"GB","USA":"US","UMI":"UM","URY":"UY","UZB":"UZ","VUT":"VU","VEN":"VE","VNM":"VN","VGB":"VG","VIR":"VI",
+    "WLF":"WF","ESH":"EH","YEM":"YE","ZMB":"ZM","ZWE":"ZW"
+  };
+
+  // 暴力破解 GeoJSON 國家代碼 (支援最新 CDN 的格式)
+  function extractIso2(feature) {
+    let p = feature.properties || {};
+    // johan 的 CDN 把三碼 ISO 放在 feature.id 裡
+    let id = feature.id || ""; 
+    
+    // 1. 嘗試抓取 2 碼
+    let a2 = p.ISO_A2 || p.iso_a2 || p.A2 || p.a2;
+    if (a2 && a2.length === 2 && a2 !== "-1" && a2 !== "-99") return a2.toUpperCase();
+    
+    // 2. 嘗試抓取 3 碼並轉為 2 碼
+    let a3 = p.ISO_A3 || p.iso_a3 || p.ADM0_A3 || p.adm0_a3 || id;
+    if (a3 && typeof a3 === 'string' && a3.length === 3) {
+      let trans = ISO3_TO_ISO2[a3.toUpperCase()];
+      if (trans) return trans;
+    }
+    return null; // 找不到代碼
+  }
+
+  fetch(GEOJSON)
+    .then(r => r.json())
+    .then(geo => {
+      let failCount = 0;
+
+      // 【安全檢查】確保檔案真的是 GeoJSON
+      if (!geo.features || geo.features.length === 0) {
+          console.error("❌ [GeoJSON 錯誤] 檔案裡沒有 features 陣列，地圖下載失敗或格式錯誤！");
+          return;
+      }
+
+      L.geoJSON(geo, {
+        style: f => layerStyle(extractIso2(f), false),
+        onEachFeature(feature, layer) {
+          const iso2 = extractIso2(feature);
+          const name = feature.properties.name || feature.properties.ADMIN || "Unknown";
+
+          if (!iso2) {
+             failCount++;
+             return;
+          }
+
+          layerByIso[iso2] = layer;
+          nameByIso[iso2] = name;
+
+          layer.on({
+            mouseover() { layer.setStyle({ weight:1.5, color:"#334455" }); showPopup(iso2, name); },
+            mouseout()  { layer.setStyle(layerStyle(iso2, iso2 === selCountry)); hidePopup(); },
+            click()     { selectCountry(iso2, name); }
+          });
+        }
+      }).addTo(map);
+
+      console.log(`✅ [系統] 成功從新地圖檔綁定 ${Object.keys(layerByIso).length} 個國家！`);
+      if(failCount > 0) console.warn(`⚠️ 有 ${failCount} 個區域(如小島或南極洲)沒有國家代碼，已忽略`);
+      
+      geoReady = true;
+      if (dataReady) repaintMap();
+      document.getElementById("loading").style.display = "none";
+    })
+    .catch(err => {
+      console.error("GeoJSON 載入發生致命錯誤:", err);
+      document.getElementById("loading").style.display = "none";
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DATA FETCH
+// ═══════════════════════════════════════════════════════════
+async function fetchData() {
+  try {
+    const r    = await fetch(`${API_BASE}/api/all`, { signal: AbortSignal.timeout(9000) });
+    const data = await r.json();
+
+    countryData = data.countries || {};
+    allEvents   = data.feed      || [];
+    dataReady   = true;
+
+    // Attach events to countries for quick lookup
+    Object.keys(countryData).forEach(iso => { countryData[iso].events = []; });
+    allEvents.forEach(ev => {
+      if (countryData[ev.country]) countryData[ev.country].events.push(ev);
+    });
+
+    updateStats(!!data.mock);
+    if (geoReady) repaintMap();
+    renderFeed();
+  } catch (e) {
+    console.warn("Backend unreachable — loading embedded mock data");
+    loadMock();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EMBEDDED MOCK  (works with zero backend)
+// ═══════════════════════════════════════════════════════════
+function loadMock() {
+  const raw = {
+    UA:{w:210},RU:{w:185},IL:{w:170},PS:{w:165},IR:{w:115},
+    SY:{w:105},YE:{w:98}, SD:{w:85}, LB:{w:88}, KP:{w:68},
+    MM:{w:78}, AF:{w:90}, IQ:{w:72}, CN:{w:95}, US:{w:68},
+    PK:{w:58}, SA:{w:55}, ET:{w:48}, ML:{w:38}, TR:{w:42},
+    VE:{w:26}, IN:{w:32}, BR:{w:20}, MX:{w:25}, CO:{w:22},
+    NG:{w:30}, SO:{w:42}, CF:{w:35}, LY:{w:40}, AZ:{w:28},
+  };
+
+  const EVENTS = [
+    {id:"E01",ts:"202503241430",label:"Russia Armed Conflict vs Ukraine [Kyiv, Ukraine]",         country:"UA",root:"19",severity:10,tone:-8.4,mentions:320,url:""},
+    {id:"E02",ts:"202503241415",label:"Israel Assault vs Hamas [Gaza Strip, Palestinian Territory]",country:"PS",root:"18",severity:9,tone:-9.1,mentions:280,url:""},
+    {id:"E03",ts:"202503241400",label:"Houthi Forces — Force Posture [Red Sea, Yemen]",            country:"YE",root:"15",severity:8,tone:-6.5,mentions:145,url:""},
+    {id:"E04",ts:"202503241345",label:"China — Reduce Relations vs Taiwan [Taiwan Strait]",        country:"CN",root:"16",severity:7,tone:-5.2,mentions:210,url:""},
+    {id:"E05",ts:"202503241330",label:"Iran — Threaten United States [Tehran, Iran]",              country:"IR",root:"13",severity:8,tone:-7.1,mentions:180,url:""},
+    {id:"E06",ts:"202503241315",label:"North Korea — Force Posture [Pyongyang, North Korea]",      country:"KP",root:"15",severity:8,tone:-6.8,mentions:120,url:""},
+    {id:"E07",ts:"202503241300",label:"Sudan Armed Forces — Mass Violence [Khartoum]",             country:"SD",root:"20",severity:10,tone:-9.5,mentions:95,url:""},
+    {id:"E08",ts:"202503241245",label:"Myanmar Military — Assault vs Civilians [Yangon]",          country:"MM",root:"18",severity:9,tone:-8.2,mentions:88,url:""},
+    {id:"E09",ts:"202503241230",label:"US — Economic Coercion vs China [Washington DC]",           country:"US",root:"17",severity:6,tone:-4.3,mentions:240,url:""},
+    {id:"E10",ts:"202503241215",label:"Pakistan — Armed Conflict vs India [Line of Control]",      country:"PK",root:"19",severity:7,tone:-7.4,mentions:130,url:""},
+    {id:"E11",ts:"202503241200",label:"Saudi Arabia — Reduce Relations vs Iran [Riyadh]",          country:"SA",root:"16",severity:6,tone:-5.6,mentions:105,url:""},
+    {id:"E12",ts:"202503241145",label:"Ethiopia — Armed Conflict [Tigray, Ethiopia]",              country:"ET",root:"19",severity:8,tone:-8.0,mentions:78,url:""},
+    {id:"E13",ts:"202503241130",label:"Venezuela — Protest vs Government [Caracas]",               country:"VE",root:"14",severity:5,tone:-4.1,mentions:60,url:""},
+    {id:"E14",ts:"202503241115",label:"Lebanon — Armed Conflict [Beirut, Lebanon]",                country:"LB",root:"19",severity:8,tone:-7.8,mentions:115,url:""},
+    {id:"E15",ts:"202503241100",label:"Mali — Armed Conflict vs Insurgents [Bamako]",              country:"ML",root:"19",severity:7,tone:-7.2,mentions:55,url:""},
+    {id:"E16",ts:"202503241045",label:"Afghanistan — Armed Conflict [Kabul, Afghanistan]",         country:"AF",root:"19",severity:9,tone:-8.4,mentions:82,url:""},
+    {id:"E17",ts:"202503241030",label:"Iraq — Protest vs Parliament [Baghdad]",                    country:"IQ",root:"14",severity:5,tone:-4.8,mentions:67,url:""},
+    {id:"E18",ts:"202503241015",label:"Syria — Armed Conflict [Aleppo, Syria]",                    country:"SY",root:"19",severity:9,tone:-7.9,mentions:90,url:""},
+    {id:"E19",ts:"202503241000",label:"Turkey — Coerce vs Kurdish Forces [Ankara]",                country:"TR",root:"17",severity:6,tone:-5.4,mentions:74,url:""},
+    {id:"E20",ts:"202503240945",label:"Colombia — Armed Conflict vs FARC [Bogota]",                country:"CO",root:"19",severity:7,tone:-7.1,mentions:58,url:""},
+    {id:"E21",ts:"202503240930",label:"Nigeria — Armed Conflict vs Boko Haram [Abuja]",            country:"NG",root:"19",severity:7,tone:-7.3,mentions:49,url:""},
+    {id:"E22",ts:"202503240915",label:"Somalia — Armed Conflict vs Al-Shabaab [Mogadishu]",        country:"SO",root:"19",severity:8,tone:-7.6,mentions:53,url:""},
+    {id:"E23",ts:"202503240900",label:"Libya — Armed Conflict [Tripoli, Libya]",                   country:"LY",root:"19",severity:7,tone:-6.9,mentions:44,url:""},
+    {id:"E24",ts:"202503240845",label:"Central African Republic — Mass Violence [Bangui]",         country:"CF",root:"20",severity:8,tone:-8.3,mentions:38,url:""},
+    {id:"E25",ts:"202503240830",label:"Azerbaijan — Force Posture vs Armenia [Baku]",             country:"AZ",root:"15",severity:6,tone:-5.8,mentions:42,url:""},
+    {id:"E26",ts:"202503240815",label:"Russia — Armed Conflict [Donetsk, Ukraine]",               country:"UA",root:"19",severity:10,tone:-9.0,mentions:215,url:""},
+    {id:"E27",ts:"202503240800",label:"Israel — Force Posture [West Bank, Palestinian Territory]", country:"IL",root:"15",severity:7,tone:-6.2,mentions:140,url:""},
+    {id:"E28",ts:"202503240745",label:"Iran — Armed Conflict [Iraq Border, Iran]",                 country:"IR",root:"19",severity:7,tone:-6.5,mentions:88,url:""},
+    {id:"E29",ts:"202503240730",label:"China — Threaten vs Philippines [South China Sea]",         country:"CN",root:"13",severity:7,tone:-5.9,mentions:160,url:""},
+    {id:"E30",ts:"202503240715",label:"Russia — Reduce Relations vs NATO [Moscow, Russia]",       country:"RU",root:"16",severity:6,tone:-5.3,mentions:190,url:""},
+  ];
+
+  countryData = {};
+  Object.entries(raw).forEach(([iso, d]) => {
+    const evs = EVENTS.filter(e => e.country === iso);
+    countryData[iso] = { count: evs.length || Math.ceil(d.w/8), weight: d.w, events: evs };
+  });
+  allEvents = EVENTS;
+  dataReady = true;
+
+  updateStats(true);
+  if (geoReady) repaintMap();
+  renderFeed();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════
+initMap();
+fetchData();
+setInterval(fetchData, REFRESH);
+</script>
+</body>
+</html>
