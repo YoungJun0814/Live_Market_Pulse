@@ -1,10 +1,10 @@
 """
 market_sentiment_engine.py
 ===========================
-Complete US Market Sentiment Engine — All 5 Layers
+Complete US Market Sentiment Engine - All 5 Layers
   Layer 1: Price Signals        (yfinance)
-  Layer 2: Market Breadth       (yfinance — 200MA breadth, RSI, 52w highs/lows)
-  Layer 3: Options Market       (yfinance options chain — P/C ratio, IV, Skew)
+  Layer 2: Market Breadth       (yfinance - 200MA breadth, RSI, 52w highs/lows)
+  Layer 3: Options Market       (yfinance options chain - P/C ratio, IV, Skew)
   Layer 4: Macro / Economic     (FRED API)
   Layer 5: Sentiment Surveys    (CNN Fear & Greed, Google Trends)
 
@@ -15,15 +15,15 @@ Run API server:
     uvicorn market_sentiment_engine:app --host 0.0.0.0 --port 8000 --reload
 
 Endpoints:
-    GET /                       — service info
-    GET /health                 — system status
-    GET /snapshot/full          — all 5 layers + composite score + directional split
-    GET /snapshot/prices        — Layer 1 only
-    GET /snapshot/breadth       — Layer 2 only
-    GET /snapshot/options       — Layer 3 only
-    GET /snapshot/macro         — Layer 4 only
-    GET /snapshot/surveys       — Layer 5 only
-    GET /snapshot/sentiment     — composite score + directional split + key signals (best for Gemini)
+    GET /                       - service info
+    GET /health                 - system status
+    GET /snapshot/full          - all 5 layers + composite score + directional split
+    GET /snapshot/prices        - Layer 1 only
+    GET /snapshot/breadth       - Layer 2 only
+    GET /snapshot/options       - Layer 3 only
+    GET /snapshot/macro         - Layer 4 only
+    GET /snapshot/surveys       - Layer 5 only
+    GET /snapshot/sentiment     - composite score + directional split + key signals (best for Gemini)
 """
 
 import os
@@ -43,7 +43,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# ── Optional imports ──────────────────────────────────────────────────────────
+# -- Optional imports ----------------------------------------------------------
 try:
     from fredapi import Fred
     FRED_AVAILABLE = True
@@ -57,9 +57,9 @@ except ImportError:
     PYTRENDS_AVAILABLE = False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # CONFIG  (all secrets loaded from .env)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 FRED_API_KEY      = os.getenv("FRED_API_KEY", "")   # set in backend/.env
 CACHE_TTL_SECONDS = 300                              # 5-minute default cache
 
@@ -70,7 +70,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Shared HTTP session (browser headers to reduce blocking) ──────────────────
+# -- Shared HTTP session (browser headers to reduce blocking) ------------------
 _SESSION = requests.Session()
 _SESSION.headers.update({
     "User-Agent": (
@@ -85,38 +85,38 @@ _SESSION.headers.update({
 })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # TICKER REGISTRY
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 TICKERS = {
-    # ── Equity Indices ────────────────────────────────────────────────────────
+    # -- Equity Indices --------------------------------------------------------
     "^GSPC":     "S&P 500",
     "^IXIC":     "NASDAQ Composite",
     "^DJI":      "Dow Jones Industrial Average",
     "^RUT":      "Russell 2000 (Small-Cap)",
     "^NDX":      "NASDAQ-100",
     "^MID":      "S&P MidCap 400",
-    # ── Volatility ───────────────────────────────────────────────────────────
+    # -- Volatility -----------------------------------------------------------
     "^VIX":      "CBOE Volatility Index (VIX)",
     "^VXN":      "NASDAQ Volatility (VXN)",
     "^RVX":      "Russell 2000 Volatility (RVX)",
     "^VVIX":     "VIX of VIX (VVIX)",
-    # ── Treasury Yields ───────────────────────────────────────────────────────
+    # -- Treasury Yields -------------------------------------------------------
     "^IRX":      "13-Week T-Bill Yield (3M)",
     "^FVX":      "5-Year Treasury Yield",
     "^TNX":      "10-Year Treasury Yield",
     "^TYX":      "30-Year Treasury Yield",
-    # ── Treasury ETFs ─────────────────────────────────────────────────────────
+    # -- Treasury ETFs ---------------------------------------------------------
     "SHY":       "iShares 1-3 Year Treasury ETF",
     "IEF":       "iShares 7-10 Year Treasury ETF",
     "TLT":       "iShares 20+ Year Treasury ETF",
     "TIPS":      "iShares TIPS Bond ETF",
-    # ── Credit ────────────────────────────────────────────────────────────────
+    # -- Credit ----------------------------------------------------------------
     "HYG":       "iShares High Yield Corporate Bond ETF",
     "LQD":       "iShares Investment Grade Corp Bond ETF",
     "JNK":       "SPDR Bloomberg High Yield Bond ETF",
     "EMB":       "iShares JP Morgan EM Bond ETF",
-    # ── Commodities ───────────────────────────────────────────────────────────
+    # -- Commodities -----------------------------------------------------------
     "GC=F":      "Gold Futures",
     "SI=F":      "Silver Futures",
     "CL=F":      "Crude Oil WTI Futures",
@@ -125,13 +125,13 @@ TICKERS = {
     "HG=F":      "Copper Futures",
     "ZC=F":      "Corn Futures",
     "ZW=F":      "Wheat Futures",
-    # ── FX ───────────────────────────────────────────────────────────────────
+    # -- FX -------------------------------------------------------------------
     "DX-Y.NYB":  "US Dollar Index (DXY)",
     "EURUSD=X":  "EUR/USD",
     "USDJPY=X":  "USD/JPY",
     "GBPUSD=X":  "GBP/USD",
     "USDCNH=X":  "USD/CNH (Offshore Yuan)",
-    # ── Sector ETFs ───────────────────────────────────────────────────────────
+    # -- Sector ETFs -----------------------------------------------------------
     "XLK":       "Technology",
     "XLF":       "Financials",
     "XLE":       "Energy",
@@ -143,22 +143,22 @@ TICKERS = {
     "XLU":       "Utilities",
     "XLRE":      "Real Estate",
     "XLB":       "Materials",
-    # ── Broad ETFs ────────────────────────────────────────────────────────────
+    # -- Broad ETFs ------------------------------------------------------------
     "SPY":       "S&P 500 ETF",
     "QQQ":       "NASDAQ-100 ETF",
     "IWM":       "Russell 2000 ETF",
     "ARKK":      "ARK Innovation ETF (Risk Appetite)",
     "GLD":       "Gold ETF",
     "USO":       "Oil ETF",
-    # ── Crypto ────────────────────────────────────────────────────────────────
+    # -- Crypto ----------------------------------------------------------------
     "BTC-USD":   "Bitcoin",
     "ETH-USD":   "Ethereum",
-    # ── Global ────────────────────────────────────────────────────────────────
+    # -- Global ----------------------------------------------------------------
     "^N225":     "Nikkei 225 (Japan)",
     "^HSI":      "Hang Seng (Hong Kong)",
     "^FTSE":     "FTSE 100 (UK)",
     "^GDAXI":    "DAX (Germany)",
-    # ── Macro ETFs ────────────────────────────────────────────────────────────
+    # -- Macro ETFs ------------------------------------------------------------
     "IAU":       "iShares Gold Trust",
     "PDBC":      "Invesco Commodity Diversified",
     "DBB":       "Base Metals ETF",
@@ -211,9 +211,9 @@ SP500_SAMPLE = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # CACHE
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 _cache_store: dict = {}
 
 def cached(ttl: int = CACHE_TTL_SECONDS):
@@ -234,9 +234,9 @@ def cached(ttl: int = CACHE_TTL_SECONDS):
     return decorator
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # LAYER 5 HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 # def _score_to_label(score: float) -> str:
 #     if score <= 20:   return "Extreme Fear"
@@ -259,7 +259,7 @@ def _fetch_cnn_fear_greed() -> dict:
       2. Alternative.me public API
       3. HTML scrape of CNN markets page
     """
-    # ── Level 1: Official CNN endpoint ───────────────────────────────────────
+    # -- Level 1: Official CNN endpoint ---------------------------------------
     try:
         resp = _SESSION.get(
             "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
@@ -279,7 +279,7 @@ def _fetch_cnn_fear_greed() -> dict:
     except Exception:
         pass
 
-    # ── Level 2: Alternative.me ───────────────────────────────────────────────
+    # -- Level 2: Alternative.me -----------------------------------------------
     try:
         resp = _SESSION.get(
             "https://api.alternative.me/fng/?limit=1&format=json",
@@ -300,7 +300,7 @@ def _fetch_cnn_fear_greed() -> dict:
     except Exception:
         pass
 
-    # ── Level 3: HTML scrape CNN markets page ─────────────────────────────────
+    # -- Level 3: HTML scrape CNN markets page ---------------------------------
     try:
         resp  = _SESSION.get("https://www.cnn.com/markets/fear-and-greed", timeout=15)
         match = re.search(r'"score"\s*:\s*(\d+\.?\d*)', resp.text)
@@ -315,24 +315,24 @@ def _fetch_cnn_fear_greed() -> dict:
     except Exception:
         pass
 
-    return {"error": "All CNN F&G endpoints failed — try again later."}
+    return {"error": "All CNN F&G endpoints failed - try again later."}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # MAIN ENGINE CLASS
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 class MarketSentimentEngine:
 
     def __init__(self):
         self.fred = Fred(api_key=FRED_API_KEY) if FRED_AVAILABLE else None
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # LAYER 1 — PRICE SIGNALS
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
+    # LAYER 1 - PRICE SIGNALS
+    # ==========================================================================
 
     @cached(ttl=300)
     def get_price_signals(self) -> dict:
-        logger.info("Layer 1 | Fetching price signals…")
+        logger.info("Layer 1 | Fetching price signals...")
         symbols = list(TICKERS.keys())
 
         try:
@@ -396,7 +396,7 @@ class MarketSentimentEngine:
         y10 = grouped.get("treasury_yields", {}).get("^TNX", {}).get("price")
         y3m = grouped.get("treasury_yields", {}).get("^IRX", {}).get("price")
         if y10 and y3m:
-            # Yahoo stores yields ×10 (e.g. 42.1 = 4.21%)
+            # Yahoo stores yields x10 (e.g. 42.1 = 4.21%)
             spread = round((y10 - y3m) / 10, 3)
             signals["yield_curve_10y_3m"] = {
                 "ten_year_pct":    round(y10 / 10, 3),
@@ -404,11 +404,11 @@ class MarketSentimentEngine:
                 "spread_pct":      spread,
                 "inverted":        spread < 0,
                 "label": (
-                    "Deeply Inverted — Strong Recession Risk" if spread < -0.5 else
-                    "Inverted — Recession Warning"            if spread < 0    else
-                    "Flat — Caution"                          if spread < 0.5  else
-                    "Normal — Healthy"                        if spread < 1.5  else
-                    "Steep — Expansion"
+                    "Deeply Inverted - Strong Recession Risk" if spread < -0.5 else
+                    "Inverted - Recession Warning"            if spread < 0    else
+                    "Flat - Caution"                          if spread < 0.5  else
+                    "Normal - Healthy"                        if spread < 1.5  else
+                    "Steep - Expansion"
                 ),
             }
 
@@ -461,13 +461,13 @@ class MarketSentimentEngine:
 
         return signals
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # LAYER 2 — MARKET BREADTH
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
+    # LAYER 2 - MARKET BREADTH
+    # ==========================================================================
 
     @cached(ttl=600)
     def get_market_breadth(self) -> dict:
-        logger.info("Layer 2 | Computing market breadth…")
+        logger.info("Layer 2 | Computing market breadth...")
 
         try:
             raw = yf.download(
@@ -534,13 +534,13 @@ class MarketSentimentEngine:
             ),
         }
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # LAYER 3 — OPTIONS MARKET
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
+    # LAYER 3 - OPTIONS MARKET
+    # ==========================================================================
 
     @cached(ttl=300)
     def get_options_signals(self) -> dict:
-        logger.info("Layer 3 | Fetching options market data…")
+        logger.info("Layer 3 | Fetching options market data...")
         results = {}
 
         for sym in ["SPY", "QQQ", "IWM"]:
@@ -615,13 +615,13 @@ class MarketSentimentEngine:
 
         return results
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # LAYER 4 — MACRO / FRED
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
+    # LAYER 4 - MACRO / FRED
+    # ==========================================================================
 
     @cached(ttl=3600)
     def get_macro_signals(self) -> dict:
-        logger.info("Layer 4 | Fetching macro data from FRED…")
+        logger.info("Layer 4 | Fetching macro data from FRED...")
 
         if not FRED_AVAILABLE or self.fred is None:
             return {"error": "fredapi not installed or FRED_API_KEY not configured"}
@@ -726,13 +726,13 @@ class MarketSentimentEngine:
 
         return signals
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # LAYER 5 — SENTIMENT SURVEYS
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
+    # LAYER 5 - SENTIMENT SURVEYS
+    # ==========================================================================
 
     @cached(ttl=900)
     def get_sentiment_surveys(self) -> dict:
-        logger.info("Layer 5 | Fetching sentiment surveys…")
+        logger.info("Layer 5 | Fetching sentiment surveys...")
         results = {}
 
         # 1. CNN Fear & Greed (3-level fallback)
@@ -770,15 +770,15 @@ class MarketSentimentEngine:
 
         return results
 
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
     # DIRECTIONAL SPLIT  (NEW)
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
 
     def compute_directional_split(self, components: dict) -> dict:
         """
         Derive Bullish / Sideways / Bearish percentage from composite components.
 
-        Each component already has a score 0–100 where:
+        Each component already has a score 0-100 where:
           100 = maximum greed/bullish
             0 = maximum fear/bearish
            50 = perfectly neutral/sideways
@@ -786,11 +786,11 @@ class MarketSentimentEngine:
         For every component with score S and weight W we compute three
         continuous contributions that always sum to W:
 
-          bullish_w  = W × max(0, S - 50) / 50      → peaks at S=100
-          bearish_w  = W × max(0, 50 - S) / 50      → peaks at S=0
-          sideways_w = W × (1 - |S - 50| / 50)      → peaks at S=50
+          bullish_w  = W x max(0, S - 50) / 50      -> peaks at S=100
+          bearish_w  = W x max(0, 50 - S) / 50      -> peaks at S=0
+          sideways_w = W x (1 - |S - 50| / 50)      -> peaks at S=50
 
-        Final percentages = each bucket's total weight / sum of all weights × 100.
+        Final percentages = each bucket's total weight / sum of all weights x 100.
         The three values always add up to exactly 100%.
 
         The dominant direction is whichever bucket is largest,
@@ -809,7 +809,7 @@ class MarketSentimentEngine:
         breakdown = {}
 
         for name, comp in components.items():
-            s = float(comp["score"])   # 0–100
+            s = float(comp["score"])   # 0-100
             w = float(comp["weight"])
 
             b  = max(0.0, s - 50) / 50 * w   # bullish contribution
@@ -868,15 +868,15 @@ class MarketSentimentEngine:
             "bearish_pct":  bear_pct,
             "dominant":     dominant,
             "interpretation": (
-                f"Bullish {bull_pct}% · Sideways {side_pct}% · Bearish {bear_pct}%. "
+                f"Bullish {bull_pct}% - Sideways {side_pct}% - Bearish {bear_pct}%. "
                 f"Market leans {dominant}."
             ),
             "breakdown": breakdown,
         }
 
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
     # COMPOSITE FEAR & GREED SCORE
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
 
     def compute_composite_score(
         self,
@@ -909,7 +909,7 @@ class MarketSentimentEngine:
             add("breadth", max(0, min(100, (pct_200 - 30) * (100 / 40))),
                 20, f"{pct_200}% above 200MA")
 
-        # 3. Put/Call ratio — SPY (15%)
+        # 3. Put/Call ratio - SPY (15%)
         pc_ratio = options.get("SPY", {}).get("put_call_volume_ratio")
         if pc_ratio:
             add("put_call_ratio", max(0, min(100, 100 - (pc_ratio - 0.5) * 100)),
@@ -960,14 +960,14 @@ class MarketSentimentEngine:
 
         # final = weighted_total / weight_total
         final_0_100 = weighted_total / weight_total
-        # 【核心精髓修改】將內部的 0~100 分數，線性映射到 -100 ~ +100
+        # Map the internal 0-100 score to the external -100 to +100 scale.
         final_mapped = (final_0_100 - 50) * 2
 
-        # ── Directional split derived from the same components ────────────────
+        # -- Directional split derived from the same components ----------------
         directional = self.compute_directional_split(components)
 
         return {
-            "score":             int(round(final_mapped)),  # 轉成整數，符合計畫書規定
+            "score":             int(round(final_mapped)),  # Keep an integer score for the Hub contract.
             "label":             _score_to_label(final_mapped),
             "interpretation": (
                 f"Composite score {int(round(final_mapped))}/100 (Scale -100 to +100). "
@@ -978,12 +978,12 @@ class MarketSentimentEngine:
             "directional_split": directional,
         }
 
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
     # MASTER ORCHESTRATOR
-    # ══════════════════════════════════════════════════════════════════════════
+    # ==========================================================================
 
     def get_full_snapshot(self) -> dict:
-        logger.info("🚀 Running full 5-layer snapshot…")
+        logger.info("RUN Running full 5-layer snapshot...")
         prices    = self.get_price_signals()
         breadth   = self.get_market_breadth()
         options   = self.get_options_signals()
@@ -1006,9 +1006,9 @@ class MarketSentimentEngine:
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # FASTAPI APP
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 app = FastAPI(
     title="US Market Sentiment API",
     description="5-layer market sentiment engine: Prices, Breadth, Options, Macro, Surveys",
@@ -1036,7 +1036,7 @@ def root():
             "options only":      "GET /snapshot/options",
             "macro only":        "GET /snapshot/macro",
             "surveys only":      "GET /snapshot/surveys",
-            "sentiment summary": "GET /snapshot/sentiment  ← best for Gemini",
+            "sentiment summary": "GET /snapshot/sentiment  <- best for Gemini",
             "health":            "GET /health",
             "interactive docs":  "GET /docs",
         },
@@ -1056,7 +1056,7 @@ def health():
 
 @app.get("/snapshot/full", tags=["Snapshot"])
 def full_snapshot():
-    """All 5 layers + composite score + directional split. First call takes ~15–30s."""
+    """All 5 layers + composite score + directional split. First call takes ~15-30s."""
     try:
         return JSONResponse(engine.get_full_snapshot())
     except Exception as e:
@@ -1065,7 +1065,7 @@ def full_snapshot():
 
 @app.get("/snapshot/prices", tags=["Snapshot"])
 def prices():
-    """Layer 1 — 60+ price tickers with change%, direction, derived signals."""
+    """Layer 1 - 60+ price tickers with change%, direction, derived signals."""
     try:
         return JSONResponse(engine.get_price_signals())
     except Exception as e:
@@ -1074,7 +1074,7 @@ def prices():
 
 @app.get("/snapshot/breadth", tags=["Snapshot"])
 def breadth():
-    """Layer 2 — % above 200MA, RSI distribution, 52-week highs/lows."""
+    """Layer 2 - % above 200MA, RSI distribution, 52-week highs/lows."""
     try:
         return JSONResponse(engine.get_market_breadth())
     except Exception as e:
@@ -1083,7 +1083,7 @@ def breadth():
 
 @app.get("/snapshot/options", tags=["Snapshot"])
 def options():
-    """Layer 3 — Put/Call ratio, IV, IV skew for SPY / QQQ / IWM."""
+    """Layer 3 - Put/Call ratio, IV, IV skew for SPY / QQQ / IWM."""
     try:
         return JSONResponse(engine.get_options_signals())
     except Exception as e:
@@ -1092,7 +1092,7 @@ def options():
 
 @app.get("/snapshot/macro", tags=["Snapshot"])
 def macro():
-    """Layer 4 — FRED: CPI, unemployment, Fed rate, GDP, consumer confidence."""
+    """Layer 4 - FRED: CPI, unemployment, Fed rate, GDP, consumer confidence."""
     try:
         return JSONResponse(engine.get_macro_signals())
     except Exception as e:
@@ -1101,7 +1101,7 @@ def macro():
 
 @app.get("/snapshot/surveys", tags=["Snapshot"])
 def surveys():
-    """Layer 5 — CNN Fear & Greed, Google Trends."""
+    """Layer 5 - CNN Fear & Greed, Google Trends."""
     try:
         return JSONResponse(engine.get_sentiment_surveys())
     except Exception as e:
@@ -1111,7 +1111,7 @@ def surveys():
 @app.get("/snapshot/sentiment", tags=["Snapshot"])
 def sentiment_summary():
     """
-    Composite score + directional split + key signals — no raw data.
+    Composite score + directional split + key signals - no raw data.
     Fastest meaningful endpoint. Ideal for passing directly to Gemini.
     """
     try:
@@ -1125,17 +1125,17 @@ def sentiment_summary():
         return JSONResponse({
             "meta": {"fetched_at": datetime.utcnow().isoformat() + "Z"},
 
-            # ── Core sentiment output ────────────────────────────────────────
+            # -- Core sentiment output ----------------------------------------
             "composite_sentiment": {
                 "score":             composite.get("score"),
                 "label":             composite.get("label"),
                 "interpretation":    composite.get("interpretation"),
             },
 
-            # ── NEW: Directional split ───────────────────────────────────────
+            # -- NEW: Directional split ---------------------------------------
             "directional_split": composite.get("directional_split"),
 
-            # ── Supporting signals ───────────────────────────────────────────
+            # -- Supporting signals -------------------------------------------
             "price_signals":   prices.get("signals", {}),
             "breadth_summary": {
                 "pct_above_200ma": breadth.get("pct_above_200day_ma"),
@@ -1167,8 +1167,8 @@ def sentiment_summary():
 @app.get("/api/hub_payload", tags=["Hackathon"])
 def get_hub_payload():
     """
-    專為 Central Hub 設計的 Endpoint，
-    完美符合 EXECUTION_PLAN.md 第 5-3 節的 JSON 介面約定！
+    Endpoint tailored for the Central Hub.
+    Returns a payload aligned with the section 5-3 JSON contract.
     """
     try:
         prices    = engine.get_price_signals()
@@ -1178,10 +1178,10 @@ def get_hub_payload():
         surveys   = engine.get_sentiment_surveys()
         composite = engine.compute_composite_score(prices, breadth, options, macro, surveys)
 
-        # 已經是 -100 ~ 100 的最終分數
+        # The composite score is already expressed on the -100 to +100 scale.
         sentiment_score = composite.get("score", 0)
 
-        # 輔助函數：抓取計畫書需要的特定指標
+        # Helper for pulling the specific tickers needed by the Hub payload.
         def get_ticker_data(ticker):
             data = prices.get("data", {})
             for category in data.values():
@@ -1192,45 +1192,49 @@ def get_hub_payload():
         sp500_data = get_ticker_data("^GSPC")
         vix_data   = get_ticker_data("^VIX")
         
-        # ── 動態信心度計算 (Dynamic Confidence) ──
-        # 1. 資料完整度 (Coverage): 最高 100。利用你原本 compute_composite_score 算出的 weights_used
+        # Dynamic confidence calculation.
+        # 1. Coverage score: up to 100, based on the total captured engine weight.
         coverage_score = composite.get("weights_used", 0)
 
-        # 2. 訊號共識度 (Consensus): 最高 100。從你寫的 directional_split 找出最大宗的比例
+        # 2. Consensus score: up to 100, based on the dominant directional share.
         split = composite.get("directional_split", {})
         bull_pct = split.get("bullish_pct") or 0
         bear_pct = split.get("bearish_pct") or 0
         side_pct = split.get("sideways_pct") or 0
         consensus_score = max(bull_pct, bear_pct, side_pct)
 
-        # 公式：70% 看重資料有沒有抓到，30% 看重各指標是否團結一致
+        # Weight coverage at 70% and consensus at 30%.
         raw_confidence = (coverage_score * 0.7) + (consensus_score * 0.3)
         
-        # 確保落在 0~100 的整數區間
+        # Clamp confidence into the 0-100 integer range.
         dynamic_confidence = max(0, min(100, int(round(raw_confidence))))
 
-        # 產生動態的一句話 signal 摘要 (包含你的 5 層分析精華)
+        # Build a one-line signal summary from the five-layer engine output.
         dominant = composite.get("directional_split", {}).get("dominant", "Neutral")
-        signal_text = f"S&P {sp500_data['change_pct']}%, VIX {vix_data['change_pct']}% — {dominant} sentiment based on 5-layer breadth & macro analysis."
+        signal_text = f"S&P {sp500_data['change_pct']}%, VIX {vix_data['change_pct']}% - {dominant} sentiment based on 5-layer breadth & macro analysis."
 
         payload = {
             "source": "market_data",
             "sentiment_score": sentiment_score,
-            "confidence": dynamic_confidence,  # 使用動態計算出的信心度
+            "confidence": dynamic_confidence,  # Use the dynamic confidence score above.
             "signal": signal_text,
             "details": {
                 "sp500": {"price": sp500_data["price"], "change_pct": sp500_data["change_pct"]},
+                "nasdaq": {
+                    "price": get_ticker_data("^IXIC")["price"],
+                    "change_pct": get_ticker_data("^IXIC")["change_pct"],
+                },
                 "vix":   {"price": vix_data["price"],   "change_pct": vix_data["change_pct"]},
                 "oil":   {"price": get_ticker_data("CL=F")["price"], "change_pct": get_ticker_data("CL=F")["change_pct"]},
                 "dxy":   {"price": get_ticker_data("DX-Y.NYB")["price"], "change_pct": get_ticker_data("DX-Y.NYB")["change_pct"]},
                 "gold":  {"price": get_ticker_data("GC=F")["price"], "change_pct": get_ticker_data("GC=F")["change_pct"]},
-                # US10Y 處理: Yahoo 預設把 4.25% 存成 42.5，所以除以 10 還原
+                # Yahoo stores 10Y yields like 4.25% as 42.5, so divide by 10.
                 "us10y": {
                     "yield": round(get_ticker_data("^TNX")["price"] / 10, 2), 
-                    "change_bps": round(get_ticker_data("^TNX")["change_pct"] * 10, 1) # 近似計算 bps
+                    "change_bps": round(get_ticker_data("^TNX")["change_pct"] * 10, 1) # Approximate bps change.
                 }
             },
-            "market_status": "open", # 實戰時你可以再用 datetime 寫個簡單判斷
+            "market_status": "open", # Replace with a real session-status check if needed.
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }
 

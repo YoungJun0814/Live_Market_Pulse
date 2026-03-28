@@ -1,0 +1,79 @@
+{
+  "US": {
+    "stock_index": "S&P 500",
+    "stock_value": 5421,
+    "gdp_growth": 2.4,
+    "cpi": 3.1,
+    "currency": "USD"
+  },
+  "CN": {
+    "stock_index": "CSI 300",
+    "stock_value": 3562,
+    "gdp_growth": 4.8,
+    "cpi": 0.7,
+    "currency": "CNY"
+  },
+  "GB": {
+    "stock_index": "FTSE 100",
+    "stock_value": 8092,
+    "gdp_growth": 0.6,
+    "cpi": 3.4,
+    "currency": "GBP"
+  },
+  "JP": {
+    "stock_index": "Nikkei 225",
+    "stock_value": 38940,
+    "gdp_growth": 0.9,
+    "cpi": 2.6,
+    "currency": "JPY"
+  },
+  "DE": {
+    "stock_index": "DAX",
+    "stock_value": 18761,
+    "gdp_growth": 0.2,
+    "cpi": 2.3,
+    "currency": "EUR"
+  },
+  "FR": {
+    "stock_index": "CAC 40",
+    "stock_value": 7942,
+    "gdp_growth": 0.8,
+    "cpi": 2.5,
+    "currency": "EUR"
+  },
+  "KR": {
+    "stock_index": "KOSPI",
+    "stock_value": 2715,
+    "gdp_growth": 2.1,
+    "cpi": 2.8,
+    "currency": "KRW"
+  },
+  "IN": {
+    "stock_index": "NIFTY 50",
+    "stock_value": 22419,
+    "gdp_growth": 6.7,
+    "cpi": 5.1,
+    "currency": "INR"
+  },
+  "BR": {
+    "stock_index": "Ibovespa",
+    "stock_value": 128144,
+    "gdp_growth": 2.2,
+    "cpi": 4.5,
+    "currency": "BRL"
+  },
+  "AU": {
+    "stock_index": "ASX 200",
+    "stock_value": 7781,
+    "gdp_growth": 1.5,
+    "cpi": 3.6,
+    "currency": "AUD"
+  },
+  "IL": {
+    "stock_index": "TA-125",
+    "stock_value": 1964,
+    "gdp_growth": 2.0,
+    "cpi": 2.7,
+    "currency": "ILS"
+  }
+}

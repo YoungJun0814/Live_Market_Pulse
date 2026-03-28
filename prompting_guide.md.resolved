@@ -1,0 +1,394 @@
+# AI 코딩 에이전트 프롬프트 가이드
+
+> EXECUTION_PLAN v6 기반으로 각 모듈별 에이전트 프롬프트를 최적화하는 방법
+> (v6: Fishjam × Smelter Deep Integration 반영)
+
+---
+
+## 핵심 원칙: 3-Layer Prompt 구조
+
+에이전트에게 코드를 짜달라고 할 때, 항상 이 3계층을 포함해야 합니다:
+
+```
+[1. Role]    → 에이전트가 어떤 전문가인지 정의
+[2. Context] → 프로젝트 컨텍스트 + 관련 파일 + JSON 스키마
+[3. Task]    → 구체적으로 무엇을 생성할지 + 완료 조건
+```
+
+> [!CAUTION]
+> **절대 하면 안 되는 것**: "대시보드 만들어줘"처럼 한 문장으로 전체를 던지기.
+> 에이전트는 컨텍스트 없이 일반적인 대시보드를 만듭니다. 결과물이 EXECUTION_PLAN과 전혀 다를 것.
+
+---
+
+## 스킬 활용 — 설치 추천 목록
+
+`tmp_awesome_skills/skills/`에서 프로젝트에 직접 도움되는 5개 스킬:
+
+| 스킬 | 경로 | 용도 | 누가 사용 |
+|------|------|------|----------|
+| `fastapi-pro` | `skills/fastapi-pro/` | Central Hub 백엔드 (WebSocket, async, Pydantic) | Jun |
+| `react-best-practices` | `skills/react-best-practices/` | 프론트엔드 성능 최적화 | Andy |
+| `gemini-api-integration` | `skills/gemini-api-integration/` | Gemini Live API 연동 패턴 | Jun, Tamas |
+| `frontend-ui-dark-ts` | `skills/frontend-ui-dark-ts/` | 다크 모드 글래스모피즘 UI 시스템 | Andy |
+| `executing-plans` | `skills/executing-plans/` | 계획 기반 배치 실행 워크플로 | 전원 |
+
+### 스킬 설치 방법
+
+프로젝트 루트에 `.agents/skills/` 디렉토리를 만들고 필요한 스킬을 복사:
+
+```bash
+mkdir -p .agents/skills
+cp -r tmp_awesome_skills/skills/fastapi-pro .agents/skills/
+cp -r tmp_awesome_skills/skills/react-best-practices .agents/skills/
+cp -r tmp_awesome_skills/skills/gemini-api-integration .agents/skills/
+cp -r tmp_awesome_skills/skills/frontend-ui-dark-ts .agents/skills/
+cp -r tmp_awesome_skills/skills/executing-plans .agents/skills/
+```
+
+설치하면 에이전트가 자동으로 스킬을 인식하고, 관련 작업 시 참고합니다.
+
+---
+
+## 모듈별 프롬프트 템플릿
+
+### 1️⃣ Jun — Central Hub 백엔드
+
+```
+참고할 스킬: .agents/skills/fastapi-pro/SKILL.md, .agents/skills/gemini-api-integration/SKILL.md
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 3 (Architecture), Section 5 (Data Schema), Section 6 (Weights)
+
+[Context]
+- EXECUTION_PLAN_EN.md 파일을 먼저 읽어줘
+- 기존 코드: backend/ 디렉토리에 market_engine.py (Andy의 5-Layer 엔진, 수정 금지), .env, requirements.txt가 있음
+- 아키텍처: FastAPI + python-socketio + Gemini Live API
+
+[Task]
+다음 백엔드 파일들을 생성해줘:
+
+1. backend/main.py — FastAPI 서버 진입점
+   - POST /api/signal 엔드포인트 (Pydantic 검증)
+   - 헬스체크 /health
+   - CORS 허용 (localhost:5173)
+   - socket.io 마운트
+
+2. backend/config.py — 상수 정의
+   - SOURCE_WEIGHTS, FALLBACK_WEIGHTS, SENTIMENT_THRESHOLDS
+   - AUTOPILOT_THRESHOLD=60, AUTOPILOT_COOLDOWN_SEC=30
+   - Section 6의 값 그대로 사용
+
+3. backend/models.py — Pydantic 스키마
+   - Section 5-1 ~ 5-5의 JSON 스키마를 Pydantic BaseModel로 정의
+
+4. backend/signal_queue.py — 소스별 시그널 큐
+   - dict[str, deque] 구조
+   - 30초 이상 된 시그널 자동 만료
+
+5. backend/websocket_server.py — socket.io 서버
+   - "sentiment_update" 이벤트: Section 5-4 스키마
+   - "focus_region" 이벤트: Section 5-5 스키마
+   - should_trigger_autopilot() 함수 포함
+
+6. backend/scheduler.py — 30초 배치 스케줄러
+   - apscheduler로 30초마다 시그널 집계
+   - market_engine.py에서 MarketSentimentEngine import하여 사용
+
+[완료 조건]
+- `uvicorn backend.main:app --reload`로 서버 실행 가능
+- /health 200 OK
+- /docs에서 Swagger 확인 가능
+```
+
+---
+
+### 2️⃣ Andy — 프론트엔드 레이아웃 + 컴포넌트
+
+```
+참고할 스킬: .agents/skills/react-best-practices/SKILL.md, .agents/skills/frontend-ui-dark-ts/SKILL.md
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 8 (Dashboard Layout), Section 5-4 (WebSocket 스키마)
+
+[Context]
+- EXECUTION_PLAN_EN.md를 먼저 읽어줘
+- React 18 + Vite + TypeScript 프로젝트
+- 디자인: Dark Mode 금융 터미널 (배경 #0D1117, 테두리 #30363D)
+- 데이터 색상: Bullish=#00FF88, Bearish=#FF4444, Neutral=#FFAA00
+- 글래스모피즘: backdrop-filter: blur(12px)
+- CSS Framework: Vanilla CSS (TailwindCSS 사용하지 않음)
+- 애니메이션: framer-motion
+- ⚠️ 중요: Smelter는 별도 Node.js 서버에서 비디오 합성 처리함.
+  Zone 3의 LiveNewsPlayer는 Fishjam WHEP Player로 Smelter가 합성한 영상을 WebRTC로 수신함.
+  CSS 오버레이가 아님 — 영상 프레임에 bake된 합성 영상임.
+
+[Task]
+1. frontend/ 디렉토리에 React + Vite + TypeScript 프로젝트 초기화
+2. CSS Grid 6영역 레이아웃 구현 (Section 8의 와이어프레임 참고):
+   - Zone 1 (좌상): WorldMap placeholder (50%)
+   - Zone 2 (우상): SentimentGauge + SentimentHistory (50%)
+   - Zone 3 (좌하): LiveNewsPlayer — Fishjam WHEP Player (25%)
+   - Zone 4 (중하): MarketDrivers (50%)
+   - Zone 5 (우하): DriverFeed (25%)
+   - Zone 6 (최하): HeadlinesTicker (100%)
+
+3. 컴포넌트 생성:
+   - SentimentGauge.tsx: 반원 게이지 (-100~+100), CSS로 구현
+   - SentimentHistory.tsx: Recharts 꺾은선 (최근 30분)
+   - MarketDrivers.tsx: 2x3 격자 스파크라인 (S&P, NASDAQ, VIX, Gold, Oil, 10Y)
+   - DriverFeed.tsx: 팩트체크 카드 시간순 스크롤, Section 5-4의 drivers[] 배열 렌더링
+   - LiveNewsPlayer.tsx: Fishjam WHEP Player (Section 7-2 하단의 Frontend WHEP Player 코드 참조)
+     - @fishjam-cloud/react-client의 useRemotePeers() 사용
+     - Smelter가 합성한 비디오 스트림을 WebRTC로 수신
+
+4. hooks:
+   - useWebSocket.ts: socket.io-client 연결 + "sentiment_update", "focus_region" 리스너
+   - useSentiment.ts: sentiment 상태 + signalHistory 배열 축적 (최근 100개)
+
+5. types/index.ts: Section 5-4 스키마를 TypeScript interface로 정의
+
+[완료 조건]
+- `npm run dev`로 localhost:5173 접속 시 6영역 그리드 렌더링
+- 각 Zone에 컴포넌트 이름이 보이는 상태
+- 게이지가 -100 ~ +100 범위에서 시각화
+- Zone 3에 Fishjam WHEP Player 컴포넌트가 렌더링 (영상은 Smelter 서버 가동 후 표시)
+```
+
+---
+
+### 3️⃣ Jun — 2D Map + Pulse + CountryNewsPanel 연동
+
+```
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 8-1 (Auto-Pilot), Section 8-2 (Country News Panel)
+
+[Context]
+- frontend/ 프로젝트가 이미 생성됨 (Andy가 완료)
+- react-leaflet 사용
+- WebSocket에서 focus_region 이벤트가 도착하면 Pulse 마커 생성
+- 마커 클릭 시 CountryNewsPanel 열림
+
+[Task]
+1. WorldMap.tsx 컴포넌트:
+   - react-leaflet로 2D 지도 (다크 타일: CartoDB Dark Matter)
+   - events prop으로 이벤트 마커 배열 수신
+   - focus_region 이벤트 수신 시 해당 좌표에 Pulse 마커 생성
+   - Pulse CSS: .pulse-ring { animation: pulse 1.5s ease-out 3; }
+   - Bearish=#FF4444, Bullish=#00FF88 색상 분기
+   - 마커 클릭 시 onCountrySelect(countryCode) 호출
+
+2. CountryNewsPanel.tsx:
+   - position: fixed, right: 0, height: 100vh, width: 420px
+   - 배경: rgba(13, 17, 23, 0.85) + backdrop-filter: blur(12px)
+   - 뒷배경: rgba(0,0,0,0.4) 오버레이, 클릭 시 패널 닫힘
+   - framer-motion: initial={{ x: 420 }} animate={{ x: 0 }}
+   - 상단: 국기 + 국가명 + 경제 지표 (country_profiles.json에서 로드)
+   - 하단: signalHistory.filter(s => s.event_location?.country === selectedCountry)
+
+3. data/country_profiles.json:
+   - US, CN, GB, JP, DE, FR, KR, IN, BR, AU 10개국
+   - 각 국가: { stock_index, stock_latest, gdp_growth, cpi, currency }
+
+[완료 조건]
+- 맵에 마커가 표시되고 클릭 시 패널이 오른쪽에서 슬라이드인
+- Pulse 애니메이션 3회 후 일반 마커로 전환
+- 패널 바깥 클릭 시 닫힘
+```
+
+---
+
+### 4️⃣ Andy — CountryNewsPanel UI + Demo Controls
+
+```
+[Context]
+- Jun이 CountryNewsPanel의 로직과 구조를 만들었음
+- Andy는 내부 카드 디자인을 Zone 5의 DriverFeed 카드와 동일하게 맞춤
+- DemoControls.tsx도 이 단계에서 생성
+
+[Task]
+1. CountryNewsPanel 내부 카드 스타일을 DriverFeed.tsx에서 가져와 재사용
+   - SignalCard 컴포넌트: sentiment_score 색상, fact_check 뱃지, 타임스탬프
+
+2. DemoControls.tsx:
+   - 3개 버튼: [Inject: Fed Rate Cut], [Inject: Trade War], [Reset to Neutral]
+   - 각 버튼 클릭 시 POST /api/signal로 미리 정의된 시그널 전송
+   - Fed Rate Cut: sentiment_score: +80, source: "news_stream"
+   - Trade War: sentiment_score: -78, source: "politician", event_location: {lat:38.9, lon:-77.0}
+   - 위치: 화면 좌하단에 투명 패널로 배치 (데모 시에만 표시)
+
+[완료 조건]
+- 버튼 클릭 → 백엔드 /api/signal로 데이터 전송 확인
+- 대시보드 전체가 연쇄 반응하는지 확인
+```
+
+---
+
+### 5️⃣ Tamas — Fishjam Agent SDK + Gemini Live 파이프라인
+
+```
+참고할 스킬: .agents/skills/gemini-api-integration/SKILL.md
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 7-1 (Agent SDK 코드 전체), Section 7-3 (Tamas 스펙 수정사항), Section 5-1, Section 14-2
+
+[Context]
+- EXECUTION_PLAN_EN.md를 먼저 읽어줘
+- ⚠️ 반드시 Section 7-1의 "Fishjam Agent SDK + Gemini Built-in Integration" 코드를 참조할 것
+- ⚠️ 반드시 Section 7-3의 "Tamas Pipeline Spec Modifications" 표를 확인할 것
+- Fishjam Cloud (SaaS) 사용 — Docker self-hosted 아님
+- fishjam-server-sdk[gemini] 빌트인 모듈 사용 — 수동 Gemini WebSocket 아님
+- Agent SDK가 오디오 샘플레이트 자동 매칭 (16kHz in / 24kHz out)
+- Redis 불필요 — Agent가 직접 Gemini에 스트리밍
+- Bloomberg 우선, Sky News 폴백 (시간 기반 전환 아님)
+- Google News Finance/Econ RSS 보조 피드 사용
+- RSS URL: https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtVnVHZ0pWVXlnQVAB?hl=en-US&gl=US&ceid=US%3Aen
+
+[핵심 기술 스택]
+- pip install "fishjam-server-sdk[gemini]"
+- from fishjam import FishjamClient, AgentOptions
+- from fishjam.integrations.gemini import GeminiIntegration
+- GeminiIntegration.GEMINI_INPUT_AUDIO_SETTINGS (16kHz 자동)
+- GeminiIntegration.GEMINI_OUTPUT_AUDIO_SETTINGS (24kHz 자동)
+
+[Task]
+1. backend/youtube_resolver.py:
+   - Bloomberg TV Live URL 우선 탐지 (try_bloomberg())
+   - 실패 시 Sky News URL 폴백 (SKY_NEWS_URL 상수)
+   - yt-dlp로 오디오 스트림 URL 추출
+
+2. backend/fishjam_audio_agent.py (핵심 파일):
+   - Section 7-1의 Agent SDK 코드를 기반으로 구현
+   - FishjamClient로 Room 생성 + Agent 생성
+   - AgentOptions에 GeminiIntegration.GEMINI_INPUT_AUDIO_SETTINGS 사용
+   - 양방향 브릿지: Fishjam → Gemini (forward_audio_to_gemini) + Gemini → Fishjam (forward_audio_to_fishjam)
+   - Gemini 응답에서 sentiment_score JSON 추출
+   - 30초마다 POST /api/signal로 Central Hub에 전달
+
+3. Finance/Econ RSS 수집기 (보조):
+   - backend/rss_econ_collector.py: Google News Finance/Econ RSS 폴링
+   - news_stream source로 sentiment_score와 함께 POST /api/signal
+
+4. 출력 스키마: Section 5-1 정확히 준수
+5. Gemini 프롬프트: Section 14-2 정확히 사용
+
+[완료 조건]
+- Bloomberg/Sky News URL 자동 탐지 성공
+- fishjam-server-sdk[gemini]의 GeminiIntegration이 오디오 포맷 자동 매칭
+- Gemini가 오디오에서 텍스트 + 감성 추출
+- Central Hub에 Section 5-1 스키마의 JSON 도착 확인
+- 심사위원 토킹 포인트: "We used Fishjam's built-in Gemini integration module
+  which automatically handles sample rate matching between WebRTC audio and Gemini's input format."
+```
+
+---
+
+### 5.5️⃣ Jun/Tamas — Smelter 서버 (비디오 합성 + WHIP 출력)
+
+```
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 7-2 (Smelter 코드 전체)
+
+[Context]
+- EXECUTION_PLAN_EN.md를 먼저 읽어줘
+- Smelter는 별도 Node.js 서버 — 프론트엔드가 아님
+- @swmansion/smelter 패키지로 React 컴포넌트 기반 비디오 합성
+- CSS 오버레이가 아님 — 서버사이드에서 비디오 프레임 자체에 오버레이를 bake
+- 합성된 영상을 WHIP 프로토콜로 Fishjam Livestream Room에 push
+- 프론트엔드는 WHEP으로 합성된 영상을 WebRTC 수신
+
+[Task]
+1. smelter/package.json: @swmansion/smelter, react, react-dom 의존성
+
+2. smelter/scenes/MarketOverlayScene.tsx:
+   - Section 7-2의 Smelter React Scene 코드 기반
+   - InputStream으로 뉴스 영상 풀스크린 배경
+   - Rescaler로 fill 모드 리사이즈
+   - 좌상단: sentiment badge (BULLISH/NEUTRAL/BEARISH + 점수)
+   - 하단: LIVE ANALYSIS 시그널 티커
+   - 색상 분기: >20=#00FF88, <-20=#FF4444, else=#FFAA00
+
+3. smelter/server.ts:
+   - WebSocket으로 Central Hub의 sentiment_score 수신
+   - React state 업데이트 → Smelter 자동 비디오 프레임 재합성
+   - smelter.registerOutput()으로 WHIP 출력 설정:
+     - endpointUrl: Fishjam WHIP endpoint
+     - bearerToken: FISHJAM_STREAMER_TOKEN
+     - video: 1920x1080, ffmpeg_h264 encoder
+     - audio: opus encoder
+
+[완료 조건]
+- Smelter 서버 가동 시 뉴스 영상 위에 sentiment 오버레이 합성
+- WHIP으로 Fishjam Livestream Room에 스트림 push 성공
+- 프론트엔드 Zone 3에서 WHEP Player로 합성된 영상 표시
+- 녹화해도 오버레이가 유지됨 (CSS가 아닌 진짜 비디오 합성 확인)
+```
+
+---
+
+### 6️⃣ Tim — RSS + Gemini 팩트체크
+
+```
+참고할 스킬: .agents/skills/gemini-api-integration/SKILL.md
+참고할 계획: EXECUTION_PLAN_EN.md 의 Section 10, Section 5-2, Section 14-3
+
+[Context]
+- rss.app 정치/Twitter RSS 피드 사용
+- RSS URL: https://rss.app/rss-feed?keyword=Iran%20Israel&region=US&lang=en
+- Gemini API (Classic)로 팩트체크 + 도시 좌표 추출
+- Section 14-3의 프롬프트를 정확히 사용
+- 결과를 POST /api/signal로 Central Hub에 전달
+
+[Task]
+1. backend/rss_political_collector.py: 정치/Twitter RSS 수집 (2~5분 폴링)
+2. backend/politician_checker.py: Gemini 팩트체크 + event_location 추출
+3. 출력 스키마: Section 5-2 정확히 준수 (fact_check, event_location 포함)
+
+[완료 조건]
+- RSS에서 뉴스 수집 + Gemini 팩트체크 결과 반환
+- event_location에 lat/lon/city/country 포함
+- Central Hub에 JSON 도착 확인
+```
+
+---
+
+## 프롬프트 Anti-Patterns (하면 안 되는 것)
+
+| ❌ 나쁜 프롬프트 | ✅ 좋은 프롬프트 | 이유 |
+|---------------|--------------|------|
+| "대시보드 만들어줘" | "EXECUTION_PLAN_EN.md를 읽고 Section 8 기준으로..." | 컨텍스트 없이 일반적 대시보드 생성 |
+| "WebSocket 추가해줘" | "socket.io로 'sentiment_update' 이벤트 emit, 스키마는 Section 5-4 참조" | 이벤트명/스키마 미지정 시 임의 구조 생성 |
+| "예쁘게 만들어줘" | "배경 #0D1117, 네온 컬러, 글래스모피즘(blur 12px), framer-motion 슬라이드인" | "예쁘게"는 주관적 — 구체 수치 필요 |
+| 한 번에 전체 | 모듈별로 나눠서 순서대로 | 컨텍스트 윈도우 초과 + 품질 하락 |
+| 스키마 직접 설명 | "Section 5-4의 JSON 스키마 기준" | 계획 참조가 더 정확하고 일관성 유지 |
+
+---
+
+## 실행 순서 추천
+
+```mermaid
+graph TD
+    A["1. Jun: Central Hub 백엔드<br/>(main.py, models.py, config.py,<br/>signal_queue.py, websocket_server.py)"] --> D
+    B["2. Andy: 프론트엔드 레이아웃<br/>(6영역 Grid + WHEP Player)"] --> D
+    C1["3a. Tamas: Fishjam Agent SDK<br/>+ Gemini Live 파이프라인"] --> D
+    C2["3b. Tim: RSS 수집기"] --> D
+    D["4. 통합 테스트<br/>(WebSocket 연결 확인)"]
+    D --> E["5. Jun: Map + Pulse + Panel"]
+    D --> F["5.5. Smelter 서버<br/>(비디오 합성 + WHIP→Fishjam)"]
+    D --> G["6. Andy: DemoControls + UI 폴리싱"]
+    E --> H["7. 전체 연동 데모 리허설"]
+    F --> H
+    G --> H
+```
+
+> [!TIP]
+> **1번과 2번을 동시에 진행 가능**합니다. 백엔드(Jun)와 프론트엔드(Andy)는 JSON 스키마만 합의하면 독립적으로 작업 가능합니다. 스키마가 이미 EXECUTION_PLAN에 확정되어 있으므로 바로 병렬 진행하세요.
+
+---
+
+## 에이전트별 세션 분리 팁
+
+각 프롬프트는 **별도 세션/대화**에서 실행하는 것이 좋습니다:
+
+| 세션 | 프롬프트 | 이유 |
+|------|---------|------|
+| 세션 1 | Jun 백엔드 | backend/ 파일만 수정 |
+| 세션 2 | Andy 프론트엔드 | frontend/ 파일만 수정 |
+| 세션 3 | Tamas Fishjam Agent | backend/fishjam_audio_agent.py + youtube_resolver.py |
+| 세션 4 | Smelter 서버 | smelter/ 디렉토리 전체 |
+| 세션 5 | Jun Map+Panel | frontend/에 추가 |
+| 세션 6 | 통합 테스트 | 전체 연동 확인 |
+
+**각 세션 시작 시 반드시**: "먼저 `EXECUTION_PLAN_EN.md`를 읽어줘" 로 시작하세요. 에이전트가 전체 맥락을 파악합니다.
