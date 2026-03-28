@@ -38,6 +38,11 @@ frontend/build/
 .DS_Store
 Thumbs.db
 
+# ── Misc / Temp ───────────────────────────────────────────────────────────
+.claude/
+search_skills.py
+tmp_awesome_skills/
+
 # ── Logs & Cache ──────────────────────────────────────────────────────────────
 *.log
 .cache/

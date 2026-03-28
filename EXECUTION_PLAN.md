@@ -475,22 +475,14 @@ def fetch_political_news():
     return articles
 
 # Gemini 팩트체크 프롬프트에 위치 추출도 포함 (GKG 불필요!)
-# → Gemini가 기사 내용에서 도시 추출 → 사전 정의된 좌표 매핑
-CITY_COORDS = {
-    "Washington DC": {"lat": 38.9, "lon": -77.0},
-    "New York": {"lat": 40.7, "lon": -74.0},
-    "Brussels": {"lat": 50.85, "lon": 4.35},
-    "Beijing": {"lat": 39.9, "lon": 116.4},
-    "London": {"lat": 51.5, "lon": -0.1},
-    "Tokyo": {"lat": 35.7, "lon": 139.7},
-    # ... 주요 정치/경제 도시 20개
-}
+# → Gemini가 기사 내용을 분석하여 관련 도시명과 lat/lon 좌표를 직접 반환
+# → 별도 CITY_COORDS 딕셔너리 불필요 — Gemini가 전 세계 도시 좌표를 알고 있음
 ```
 
 ### GDELT 특성
 - 15분마다 업데이트 → 30초마다 체크해도 새 데이터는 15분 단위
 - API 키 불필요, rate limit 없음
-- 위치 데이터: GDELT 자체는 국가 수준만 제공 → **Gemini가 기사에서 도시 추출** → `CITY_COORDS` 매핑
+- 위치 데이터: **Gemini가 기사에서 관련 도시 + 좌표를 직접 추출** (GKG/CITY_COORDS 불필요)
 - Telethon(Telegram)은 **Nice to Have** — GDELT만으로 충분
 
 ---
@@ -730,7 +722,13 @@ Content: "{content}"
   "tier": "{tier}",
   "fact_check": "Real" or "Fake" or "Unverified" or "Misleading",
   "fact_check_reasoning": "one-sentence explanation",
-  "affected_sectors": ["sector1", "sector2"]
+  "affected_sectors": ["sector1", "sector2"],
+  "event_location": {{
+    "city": "city name where the event is most relevant",
+    "lat": float (latitude),
+    "lon": float (longitude),
+    "country": "2-letter country code"
+  }}
 }}
 ```
 
