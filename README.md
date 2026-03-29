@@ -2,7 +2,19 @@
 
 > **Real-time global market sentiment dashboard powered by Gemini AI, Fishjam WebRTC, and live news intelligence.**
 >
-> Built for the **Software Mansion × Google Gemini Hackathon 2026**
+> Built for the **[Software Mansion × Google Gemini Hackathon 2026](https://github.com/YoungJun0814/SoftwareMansion_x_Gemini_Hackathon)**
+
+> 📦 **Original hackathon submission repository:** [YoungJun0814/SoftwareMansion_x_Gemini_Hackathon](https://github.com/YoungJun0814/SoftwareMansion_x_Gemini_Hackathon)
+
+---
+
+## 🏆 Hackathon Background
+
+This project was originally created and submitted for the **Software Mansion × Google Gemini Hackathon 2026**, a hackathon focused on building real-world applications using Google's Gemini AI models alongside Software Mansion's open-source media infrastructure (Fishjam WebRTC, Smelter video compositor).
+
+The hackathon challenged teams to combine **Google Gemini** with **Fishjam** — Software Mansion's WebRTC media server — to build novel real-time streaming or AI-powered applications.
+
+Our team built **Live Market Pulse**: a multimodal financial intelligence platform that ingests live news, political events, and market data, processes them through Gemini AI, and delivers the result as a real-time global sentiment dashboard with a WebRTC-powered voice AI assistant.
 
 ---
 
