@@ -2,7 +2,7 @@
 
 > **Real-time global market sentiment dashboard powered by Gemini AI, Fishjam WebRTC, and live news intelligence.**
 >
-> Built for the **[Software Mansion × Google Gemini Hackathon 2026](https://github.com/YoungJun0814/SoftwareMansion_x_Gemini_Hackathon)**
+> Built for the **[Software Mansion × Google Gemini Hackathon 2026](https://hackathon.swmansion.com/)**
 
 > 📦 **Original hackathon submission repository:** [YoungJun0814/SoftwareMansion_x_Gemini_Hackathon](https://github.com/YoungJun0814/SoftwareMansion_x_Gemini_Hackathon)
 
