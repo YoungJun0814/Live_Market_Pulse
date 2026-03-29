@@ -39,17 +39,12 @@ async function main() {
       registerOutput(
         outputId: string,
         root: React.ReactElement,
-        request: {
-          type: "whip_client";
-          endpointUrl: string;
-          bearerToken?: string;
-        },
-      ): Promise<unknown>;
+        request: Record<string, unknown>,
+      ): Promise<{ endpointRoute?: string }>;
       start(): Promise<void>;
     };
   };
   const liveInputUrl = requireEnv("LIVE_NEWS_HLS_URL");
-  const whipEndpoint = requireEnv("FISHJAM_WHIP_ENDPOINT");
   const overlayApiUrl =
     process.env.OVERLAY_API_URL ?? "http://127.0.0.1:8000/api/live_overlay";
 
@@ -62,7 +57,7 @@ async function main() {
     type: "hls",
     url: liveInputUrl,
   });
-  await smelter.registerOutput(
+  const result = await smelter.registerOutput(
     OUTPUT_ID,
     React.createElement(MarketOverlayScene, {
       inputId: INPUT_ID,
@@ -73,11 +68,12 @@ async function main() {
       timestamp: overlay.timestamp,
     }),
     {
-      type: "whip_client",
-      endpointUrl: whipEndpoint,
-      bearerToken: process.env.FISHJAM_STREAMER_TOKEN,
+      type: "whep_server",
+      video: null,
+      audio: null,
     },
   );
+  console.log("[smelter] WHEP endpoint:", result);
   await smelter.start();
   console.log("[smelter] Pipeline started.");
 }

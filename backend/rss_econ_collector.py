@@ -4,7 +4,7 @@ import html
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
 import feedparser
@@ -91,7 +91,7 @@ class RssEconCollector:
             try:
                 pushed = self.push_new_signals()
                 print(
-                    f"[rss_econ_collector] pushed={pushed} at {datetime.now(UTC).isoformat()}"
+                    f"[rss_econ_collector] pushed={pushed} at {datetime.now(timezone.utc).isoformat()}"
                 )
             except Exception as exc:
                 print(f"[rss_econ_collector] error: {exc}")
@@ -100,8 +100,8 @@ class RssEconCollector:
     def _published_at(self, item: feedparser.FeedParserDict) -> datetime:
         parsed = item.get("published_parsed") or item.get("updated_parsed")
         if parsed is None:
-            return datetime.now(UTC)
-        return datetime(*parsed[:6], tzinfo=UTC)
+            return datetime.now(timezone.utc)
+        return datetime(*parsed[:6], tzinfo=timezone.utc)
 
     def _load_feed(self) -> feedparser.FeedParserDict:
         normalized_url = self._normalize_google_news_url(self.feed_url)

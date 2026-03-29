@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -78,7 +78,7 @@ class HubScheduler:
         return self.last_payload
 
     async def inject_demo_risk_event(self) -> SentimentUpdate:
-        timestamp = datetime.now(UTC)
+        timestamp = datetime.now(timezone.utc)
         self.queue.add(
             PoliticianSignal(
                 source="politician",
@@ -128,7 +128,7 @@ class HubScheduler:
         return await self.aggregate_and_publish(use_live_market=False)
 
     async def inject_demo_rss_relief(self) -> SentimentUpdate:
-        timestamp = datetime.now(UTC)
+        timestamp = datetime.now(timezone.utc)
         self.queue.add(
             NewsStreamSignal(
                 source="news_stream",
@@ -169,7 +169,7 @@ class HubScheduler:
         return await self.aggregate_and_publish(use_live_market=False)
 
     async def reset_demo_state(self) -> SentimentUpdate:
-        timestamp = datetime.now(UTC)
+        timestamp = datetime.now(timezone.utc)
         market_signal = self._load_market_signal(store=False)
 
         self.queue.clear()
@@ -357,7 +357,7 @@ class HubScheduler:
             market_snapshot=market_snapshot,
             reasoning=reasoning,
             data_freshness=freshness,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def _build_reasoning(
@@ -544,5 +544,5 @@ class HubScheduler:
             sentiment_score=signal.sentiment_score,
             source=signal.source,
             country_data=country_data,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         )

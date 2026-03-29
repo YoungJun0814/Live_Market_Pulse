@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import re
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import feedparser
@@ -77,7 +77,7 @@ class RssPoliticalCollector:
             try:
                 pushed = self.push_new_signals()
                 print(
-                    f"[rss_political_collector] pushed={pushed} at {datetime.now(UTC).isoformat()}"
+                    f"[rss_political_collector] pushed={pushed} at {datetime.now(timezone.utc).isoformat()}"
                 )
             except Exception as exc:
                 print(f"[rss_political_collector] error: {exc}")
@@ -86,8 +86,8 @@ class RssPoliticalCollector:
     def _published_at(self, item: feedparser.FeedParserDict) -> datetime:
         parsed = item.get("published_parsed") or item.get("updated_parsed")
         if parsed is None:
-            return datetime.now(UTC)
-        return datetime(*parsed[:6], tzinfo=UTC)
+            return datetime.now(timezone.utc)
+        return datetime(*parsed[:6], tzinfo=timezone.utc)
 
     def _load_feed(self) -> feedparser.FeedParserDict:
         response = self.session.get(

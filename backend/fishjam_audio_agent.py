@@ -1,137 +1,99 @@
+"""
+Fishjam Audio Agent — Gemini Live Bridge
+Connects a Fishjam room to Google Gemini Live using the v0.25 SDK API.
+"""
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+
 from fishjam import AgentOptions, FishjamClient
-from fishjam.agent import Agent, AgentSession, IncomingTrackData, OutgoingTrack
 from fishjam.integrations.gemini import GeminiIntegration
-
-from backend.config import (
-    FISHJAM_ID,
-    FISHJAM_MANAGEMENT_TOKEN,
-    FISHJAM_ROOM_ID,
-    GEMINI_LIVE_MODEL,
-)
-from backend.gemini_live_engine import GeminiLiveEngine
+from google.genai.types import Blob, Modality
 
 
-class FishjamAudioAgent:
-    """
-    Bridges Fishjam room audio into Gemini Live and optionally publishes
-    Gemini's synthesized audio back into the same room.
-    """
+FISHJAM_ID = os.environ["FISHJAM_ID"]
+FISHJAM_MANAGEMENT_TOKEN = os.environ["FISHJAM_MANAGEMENT_TOKEN"]
+FISHJAM_ROOM_ID = os.environ.get("FISHJAM_ROOM_ID", "")
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_MODEL = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview")
 
-    def __init__(
-        self,
-        room_id: str = FISHJAM_ROOM_ID,
-        fishjam_id: str = FISHJAM_ID,
-        management_token: str = FISHJAM_MANAGEMENT_TOKEN,
-        gemini_engine: GeminiLiveEngine | None = None,
-    ) -> None:
-        self.room_id = room_id
-        self.fishjam_id = fishjam_id
-        self.management_token = management_token
-        self.gemini_engine = gemini_engine or GeminiLiveEngine(
-            api_key=os.getenv("GEMINI_API_KEY", ""),
-            model_name=GEMINI_LIVE_MODEL,
-        )
 
-        self.client: FishjamClient | None = None
-        self.agent: Agent | None = None
-        self.session: AgentSession | None = None
-        self.outgoing_track: OutgoingTrack | None = None
-        self._session_cm = None
-        self._receive_task: asyncio.Task[None] | None = None
+async def run_agent(room_id: str) -> None:
+    print(f"[FishjamAgent] Connecting to room {room_id} ...")
 
-    async def start(self) -> None:
-        self._validate_env()
-        self.gemini_engine.on_output_audio = self._publish_output_audio
+    fishjam_client = FishjamClient(
+        fishjam_id=FISHJAM_ID,
+        management_token=FISHJAM_MANAGEMENT_TOKEN,
+    )
 
-        self.client = FishjamClient(
-            fishjam_id=self.fishjam_id,
-            management_token=self.management_token,
-        )
-        self.agent = self.client.create_agent(
-            self.room_id,
-            AgentOptions(output=GeminiIntegration.GEMINI_INPUT_AUDIO_SETTINGS),
-        )
+    # Use preset to match required 16 kHz input audio format
+    agent_options = AgentOptions(output=GeminiIntegration.GEMINI_INPUT_AUDIO_SETTINGS)
+    agent = fishjam_client.create_agent(room_id, agent_options)
 
-        await self.gemini_engine.start_session()
+    gen_ai = GeminiIntegration.create_client(api_key=GEMINI_API_KEY)
 
-        self._session_cm = self.agent.connect()
-        self.session = await self._session_cm.__aenter__()
-        self.outgoing_track = await self.session.add_track(
+    async with agent.connect() as fishjam_session:
+        # Use preset to match required 24 kHz output audio format
+        outgoing_track = await fishjam_session.add_track(
             GeminiIntegration.GEMINI_OUTPUT_AUDIO_SETTINGS
         )
-        self._receive_task = asyncio.create_task(self._receive_loop())
+        print("[FishjamAgent] Connected to Fishjam room. Starting Gemini session ...")
 
-    async def run_forever(self) -> None:
-        await self.start()
-        assert self._receive_task is not None
-        await self._receive_task
+        async with gen_ai.aio.live.connect(
+            model=GEMINI_MODEL,
+            config={"response_modalities": [Modality.AUDIO]},
+        ) as gemini_session:
+            print("[FishjamAgent] Gemini Live session started. Bridging audio ...")
 
-    async def stop(self) -> None:
-        if self._receive_task is not None:
-            self._receive_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._receive_task
-            self._receive_task = None
+            # Fishjam → Google
+            async def forward_audio_to_gemini() -> None:
+                async for track_data in fishjam_session.receive():
+                    if track_data.data:
+                        await gemini_session.send_realtime_input(
+                            audio=Blob(
+                                mime_type=GeminiIntegration.GEMINI_AUDIO_MIME_TYPE,
+                                data=track_data.data,
+                            )
+                        )
 
-        if self.session is not None:
-            await self.session.disconnect()
-            self.session = None
+            # Google → Fishjam
+            async def forward_audio_to_fishjam() -> None:
+                async for msg in gemini_session.receive():
+                    server_content = msg.server_content
+                    if server_content is None:
+                        continue
+                    if server_content.interrupted:
+                        await outgoing_track.interrupt()
+                    if server_content.model_turn and server_content.model_turn.parts:
+                        for part in server_content.model_turn.parts:
+                            if part.inline_data and part.inline_data.data:
+                                await outgoing_track.send_chunk(part.inline_data.data)
 
-        if self._session_cm is not None:
-            with contextlib.suppress(Exception):
-                await self._session_cm.__aexit__(None, None, None)
-            self._session_cm = None
-
-        await self.gemini_engine.stop()
-        self.outgoing_track = None
-        self.agent = None
-        self.client = None
-
-    async def _receive_loop(self) -> None:
-        assert self.session is not None
-
-        async for message in self.session.receive():
-            if not isinstance(message, IncomingTrackData):
-                continue
-            if not message.data:
-                continue
-            await self.gemini_engine.send_audio(message.data)
-
-    async def _publish_output_audio(self, pcm_chunk: bytes) -> None:
-        if self.outgoing_track is None or not pcm_chunk:
-            return
-        await self.outgoing_track.send_chunk(pcm_chunk)
-
-    def _validate_env(self) -> None:
-        missing = [
-            name
-            for name, value in (
-                ("FISHJAM_ID", self.fishjam_id),
-                ("FISHJAM_MANAGEMENT_TOKEN", self.management_token),
-                ("FISHJAM_ROOM_ID", self.room_id),
-                ("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")),
-            )
-            if not value
-        ]
-        if missing:
-            raise RuntimeError(
-                "Missing required environment variables for FishjamAudioAgent: "
-                + ", ".join(missing)
+            await asyncio.gather(
+                forward_audio_to_gemini(),
+                forward_audio_to_fishjam(),
             )
 
 
 async def _main() -> None:
-    agent = FishjamAudioAgent()
-    try:
-        await agent.run_forever()
-    finally:
-        await agent.stop()
+    room_id = FISHJAM_ROOM_ID
+    if not room_id:
+        # Auto-create a room if none is configured
+        print("[FishjamAgent] No FISHJAM_ROOM_ID set - creating a new room ...")
+        fishjam_client = FishjamClient(
+            fishjam_id=FISHJAM_ID,
+            management_token=FISHJAM_MANAGEMENT_TOKEN,
+        )
+        room = fishjam_client.create_room()
+        room_id = room.id
+        print(f"[FishjamAgent] Created room: {room_id}")
+
+    await run_agent(room_id)
 
 
 if __name__ == "__main__":

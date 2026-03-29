@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 
 from .config import QUEUE_TTL_SECONDS
@@ -31,7 +31,7 @@ class SignalQueue:
         with self._lock:
             self._expire_locked()
             self._items[signal.source].append(
-                QueuedItem(payload=signal, received_at=datetime.now(UTC))
+                QueuedItem(payload=signal, received_at=datetime.now(timezone.utc))
             )
 
     def expire(self) -> None:
@@ -71,7 +71,7 @@ class SignalQueue:
         return QueueSnapshot(counts=counts, latest_timestamps=latest)
 
     def _expire_locked(self) -> None:
-        cutoff = datetime.now(UTC) - self.ttl
+        cutoff = datetime.now(timezone.utc) - self.ttl
         for queue in self._items.values():
             while queue and queue[0].received_at < cutoff:
                 queue.popleft()
